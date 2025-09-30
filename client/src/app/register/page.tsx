@@ -65,7 +65,8 @@ export default function RegisterPage() {
       await apiMethods.auth.register({
         name: formData.name.trim(),
         email: formData.email,
-        password: formData.password
+        password: formData.password,
+        confirmPassword: formData.confirmPassword
       });
       
       // Registro bem-sucedido - redirecionar para login
