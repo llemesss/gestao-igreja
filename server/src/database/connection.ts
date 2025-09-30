@@ -12,6 +12,9 @@ const db = new Database(dbPath, {
 // Configurar WAL mode para melhor performance
 db.pragma('journal_mode = WAL');
 
+// Habilitar foreign keys
+db.pragma('foreign_keys = ON');
+
 // Interface para simular pool do PostgreSQL
 interface QueryResult {
   rows: any[];
@@ -52,6 +55,20 @@ const pool = {
       console.error('Params:', params);
       throw error;
     }
+  },
+
+  // Implementação de transação para SQLite
+  transaction: (callback: (tx: any) => void): void => {
+    const transaction = db.transaction(() => {
+      const tx = {
+        query: (text: string, params: any[] = []): QueryResult => {
+          return pool.query(text, params);
+        }
+      };
+      callback(tx);
+    });
+
+    transaction();
   },
 
   end: () => {

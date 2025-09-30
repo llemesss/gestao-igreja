@@ -7,6 +7,8 @@
     "dev": "nodemon src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "seed": "ts-node src/database/seed.ts",
+    "clean": "ts-node src/database/clean.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -15,6 +17,7 @@
   "type": "commonjs",
   "dependencies": {
     "@types/better-sqlite3": "^7.6.13",
+    "axios": "^1.12.2",
     "bcryptjs": "^3.0.2",
     "better-sqlite3": "^12.2.0",
     "cors": "^2.8.5",
@@ -22,6 +25,7 @@
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.16.3",
+    "puppeteer": "^24.22.3",
     "sqlite3": "^5.1.7",
     "uuid": "^13.0.0"
   },

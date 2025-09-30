@@ -39,7 +39,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
                  COUNT(DISTINCT u.id) as member_count
           FROM cells c
           LEFT JOIN users s ON c.supervisor_id = s.id
-          LEFT JOIN users u ON u.cell_id = c.id
+          LEFT JOIN users u ON u.cell_id = c.id AND u.status = 'ACTIVE'
           GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
           ORDER BY c.name ASC
         `;
@@ -53,7 +53,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
                  COUNT(DISTINCT u.id) as member_count
           FROM cells c
           LEFT JOIN users s ON c.supervisor_id = s.id
-          LEFT JOIN users u ON u.cell_id = c.id
+          LEFT JOIN users u ON u.cell_id = c.id AND u.status = 'ACTIVE'
           WHERE c.supervisor_id = ?
           GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
           ORDER BY c.name ASC
@@ -69,7 +69,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
                  COUNT(DISTINCT u.id) as member_count
           FROM cells c
           LEFT JOIN users s ON c.supervisor_id = s.id
-          LEFT JOIN users u ON u.cell_id = c.id
+          LEFT JOIN users u ON u.cell_id = c.id AND u.status = 'ACTIVE'
           WHERE c.id IN (SELECT cell_id FROM cell_leaders WHERE user_id = ?)
           GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
           ORDER BY c.name ASC
@@ -85,7 +85,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
                  COUNT(DISTINCT u.id) as member_count
           FROM cells c
           LEFT JOIN users s ON c.supervisor_id = s.id
-          LEFT JOIN users u ON u.cell_id = c.id
+          LEFT JOIN users u ON u.cell_id = c.id AND u.status = 'ACTIVE'
           WHERE c.id = (SELECT cell_id FROM users WHERE id = ?)
           GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
           ORDER BY c.name ASC
@@ -99,16 +99,32 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
 
     const result = await pool.query(query, params);
 
-    res.json(result.rows.map((cell: any) => ({
-      id: cell.id,
-      name: cell.name,
-      supervisor_id: cell.supervisor_id,
-      supervisor_name: cell.supervisor_name,
-      member_count: parseInt(cell.member_count) || 0,
-      leaders: [], // Inicializar array vazio para líderes
-      created_at: cell.created_at,
-      updated_at: cell.updated_at
-    })));
+    // Buscar líderes para cada célula
+    const cellsWithLeaders = await Promise.all(result.rows.map(async (cell: any) => {
+      const leadersQuery = `
+        SELECT u.id, u.name 
+        FROM cell_leaders cl
+        JOIN users u ON cl.user_id = u.id
+        WHERE cl.cell_id = $1
+      `;
+      const leadersResult = await pool.query(leadersQuery, [cell.id]);
+      
+      return {
+        id: cell.id,
+        name: cell.name,
+        supervisor_id: cell.supervisor_id,
+        supervisor_name: cell.supervisor_name,
+        member_count: parseInt(cell.member_count) || 0,
+        leaders: leadersResult.rows.map((leader: any) => ({
+          id: leader.id,
+          name: leader.name
+        })),
+        created_at: cell.created_at,
+        updated_at: cell.updated_at
+      };
+    }));
+
+    res.json(cellsWithLeaders);
 
   } catch (error) {
     console.error('Erro ao listar células:', error);
@@ -204,6 +220,9 @@ router.get('/:id/members', authenticateToken, async (req: AuthRequest, res) => {
     const { id } = req.params;
     const { userId, role } = req.user!;
 
+    console.log(`🔍 Buscando membros para a Célula ID: ${id}`);
+    console.log(`🔍 Usuário solicitante: ${userId}, Role: ${role}`);
+
     // Validar se o ID foi fornecido
     if (!id || id === 'null' || id === 'undefined') {
       return res.status(400).json({ error: 'ID da célula é obrigatório' });
@@ -215,14 +234,17 @@ router.get('/:id/members', authenticateToken, async (req: AuthRequest, res) => {
     if (['ADMIN', 'PASTOR', 'COORDENADOR'].includes(role)) {
       hasPermission = true;
     } else if (role === 'SUPERVISOR') {
-      const supervisionCheck = await pool.query('SELECT id FROM cells WHERE id = $1 AND supervisor_id = $2', [id, userId]);
+      const supervisionCheck = await pool.query('SELECT id FROM cells WHERE id = ? AND supervisor_id = ?', [id, userId]);
       hasPermission = supervisionCheck.rows.length > 0;
+      console.log(`🔍 Verificação de supervisão: ${supervisionCheck.rows.length > 0}`);
     } else if (role === 'LIDER') {
-      const leadershipCheck = await pool.query('SELECT cell_id FROM cell_leaders WHERE cell_id = $1 AND user_id = $2', [id, userId]);
+      const leadershipCheck = await pool.query('SELECT cell_id FROM cell_leaders WHERE cell_id = ? AND user_id = ?', [id, userId]);
       hasPermission = leadershipCheck.rows.length > 0;
+      console.log(`🔍 Verificação de liderança: ${leadershipCheck.rows.length > 0}`);
     }
 
     if (!hasPermission) {
+      console.log(`🔍 Sem permissão para ver membros da célula ${id}`);
       return res.status(403).json({ error: 'Sem permissão para ver membros desta célula' });
     }
 
@@ -233,20 +255,26 @@ router.get('/:id/members', authenticateToken, async (req: AuthRequest, res) => {
              COALESCE(prayer_stats.prayer_count, 0) as prayer_count,
              prayer_stats.last_prayer_date
       FROM users u
-      LEFT JOIN cell_leaders cl ON cl.user_id = u.id AND cl.cell_id = $1
+      LEFT JOIN cell_leaders cl ON cl.user_id = u.id AND cl.cell_id = ?
       LEFT JOIN (
         SELECT user_id, 
                COUNT(*) as prayer_count,
-               MAX(log_date) as last_prayer_date
-        FROM prayer_logs 
-        WHERE log_date >= date('now', '-30 days')
+               MAX(prayer_date) as last_prayer_date
+        FROM daily_prayer_log 
+        WHERE prayer_date >= date('now', '-30 days')
         GROUP BY user_id
       ) prayer_stats ON prayer_stats.user_id = u.id
-      WHERE u.cell_id = $2
+      WHERE u.cell_id = ? AND u.status = 'ACTIVE'
       ORDER BY is_leader DESC, u.name ASC
     `;
 
+    console.log(`🔍 Executando query para buscar membros da célula ${id}`);
     const members = await pool.query(membersQuery, [id, id]);
+    console.log(`🔍 Resultado da busca: ${members.rows.length} membros encontrados`);
+    
+    if (members.rows.length > 0) {
+      console.log(`🔍 Primeiros membros encontrados:`, members.rows.slice(0, 2).map(m => ({ id: m.id, name: m.name, cell_id: m.cell_id })));
+    }
 
     res.json(members.rows.map((member: any) => ({
       id: member.id,
@@ -283,10 +311,21 @@ router.post('/', requireLeaderOrAbove, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Nome da célula é obrigatório' });
     }
 
-    // Verificar se já existe uma célula com esse nome
-    const existingCell = await pool.query('SELECT id FROM cells WHERE name = $1', [name.trim()]);
+    // Normalizar o nome para verificar duplicatas (tratar 1, 01, 001 como iguais)
+    const normalizedName = name.trim().replace(/^0+/, '') || '0';
+    
+    // Verificar se já existe uma célula com esse nome normalizado
+    const existingCellsQuery = `
+      SELECT id, name FROM cells 
+      WHERE TRIM(name) = $1 
+      OR TRIM(name) = $2
+    `;
+    const existingCell = await pool.query(existingCellsQuery, [normalizedName, name.trim()]);
+    
     if (existingCell.rows.length > 0) {
-      return res.status(400).json({ error: 'Já existe uma célula com este nome' });
+      return res.status(400).json({ 
+        error: 'Já existe uma célula com este nome/número (números como 1, 01, 001 são considerados iguais)' 
+      });
     }
 
     // Gerar UUID para a nova célula
@@ -627,6 +666,244 @@ router.delete('/:id/members/:userId', requireLeaderOrAbove, async (req: AuthRequ
   }
 });
 
+// PUT /api/cells/:id - Atualizar célula (ADMIN, SUPERVISOR ou LÍDER da própria célula)
+router.put('/:id', requireLeaderOrAbove, async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  
+  try {
+    const { name, description, supervisor_id, leader_ids, secretary_id } = req.body;
+    const { role, userId } = req.user!;
+
+    // Log detalhado dos dados recebidos
+    console.log('🚨 DADOS RECEBIDOS PARA ATUALIZAR CÉLULA:');
+    console.log('🚨 ID da célula:', id);
+    console.log('🚨 Body completo:', JSON.stringify(req.body, null, 2));
+    console.log('🚨 Usuário:', userId, 'Role:', role);
+    console.log('🚨 ========================');
+
+    // Verificar permissões para editar a célula
+    let hasPermission = false;
+
+    if (['ADMIN', 'PASTOR', 'COORDENADOR'].includes(role)) {
+      hasPermission = true;
+    } else if (role === 'SUPERVISOR') {
+      // Supervisor pode editar células que supervisiona
+      const supervisionCheck = await pool.query('SELECT id FROM cells WHERE id = $1 AND supervisor_id = $2', [id, userId]);
+      hasPermission = supervisionCheck.rows.length > 0;
+    } else if (role === 'LIDER') {
+      // Líder pode editar apenas a célula que lidera
+      const leadershipCheck = await pool.query('SELECT cell_id FROM cell_leaders WHERE cell_id = $1 AND user_id = $2', [id, userId]);
+      hasPermission = leadershipCheck.rows.length > 0;
+    }
+
+    if (!hasPermission) {
+      return res.status(403).json({ error: 'Sem permissão para editar esta célula' });
+    }
+
+    // Verificar se a célula existe
+    const cellCheck = await pool.query('SELECT id, name FROM cells WHERE id = $1', [id]);
+    if (cellCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Célula não encontrada' });
+    }
+
+    // Construir query de atualização dinamicamente
+    const updates: string[] = [];
+    const params: any[] = [];
+    let paramCount = 0;
+
+    // Se o nome foi fornecido, validar e adicionar à atualização
+    if (name !== undefined) {
+      if (!name || name.trim().length === 0) {
+        return res.status(400).json({ error: 'Nome da célula é obrigatório' });
+      }
+
+      // Normalizar o nome para verificar duplicatas (tratar 1, 01, 001 como iguais)
+      const normalizedName = name.trim().replace(/^0+/, '') || '0';
+      
+      // Verificar se já existe outra célula com esse nome normalizado
+      const existingCellsQuery = `
+        SELECT id, name FROM cells 
+        WHERE (TRIM(name) = $1 OR TRIM(name) = $2)
+        AND id != $3
+      `;
+      const existingCell = await pool.query(existingCellsQuery, [normalizedName, name.trim(), id]);
+      
+      if (existingCell.rows.length > 0) {
+        return res.status(400).json({ 
+          error: 'Já existe outra célula com este nome/número (números como 1, 01, 001 são considerados iguais)' 
+        });
+      }
+
+      paramCount++;
+      updates.push(`name = $${paramCount}`);
+      params.push(name.trim());
+    }
+
+    // Se a descrição foi fornecida, adicionar à atualização
+    if (description !== undefined) {
+      paramCount++;
+      updates.push(`description = $${paramCount}`);
+      params.push(description ? description.trim() : null);
+    }
+
+    // Se o supervisor_id foi fornecido, validar e adicionar à atualização
+    if (supervisor_id !== undefined) {
+      if (supervisor_id) {
+        // Verificar se o supervisor existe e tem permissão
+        const supervisorCheck = await pool.query(
+          'SELECT id, role FROM users WHERE id = $1 AND role IN ($2, $3, $4, $5)', 
+          [supervisor_id, 'SUPERVISOR', 'COORDENADOR', 'PASTOR', 'ADMIN']
+        );
+        if (supervisorCheck.rows.length === 0) {
+          return res.status(400).json({ error: 'Supervisor não encontrado ou não tem permissão' });
+        }
+      }
+      
+      paramCount++;
+      updates.push(`supervisor_id = $${paramCount}`);
+      params.push(supervisor_id || null);
+    }
+
+    // Se o secretary_id foi fornecido, validar e adicionar à atualização
+    if (secretary_id !== undefined) {
+      if (secretary_id) {
+        // Verificar se o secretário existe
+        const secretaryCheck = await pool.query(
+          'SELECT id FROM users WHERE id = $1', 
+          [secretary_id]
+        );
+        if (secretaryCheck.rows.length === 0) {
+          return res.status(400).json({ error: 'Secretário não encontrado' });
+        }
+
+        // Verificar se o secretário é membro da célula
+        const memberCheck = await pool.query(
+          'SELECT id FROM users WHERE id = $1 AND cell_id = $2', 
+          [secretary_id, id]
+        );
+        if (memberCheck.rows.length === 0) {
+          return res.status(400).json({ error: 'O secretário deve ser membro da célula' });
+        }
+      }
+      
+      paramCount++;
+      updates.push(`secretary_id = $${paramCount}`);
+      params.push(secretary_id || null);
+    }
+
+    // Se há atualizações para fazer
+    if (updates.length > 0) {
+      paramCount++;
+      updates.push(`updated_at = datetime('now')`);
+      
+      const updateQuery = `UPDATE cells SET ${updates.join(', ')} WHERE id = $${paramCount}`;
+      params.push(id);
+      
+      await pool.query(updateQuery, params);
+    }
+
+    // Atualizar líderes da célula se leader_ids foi fornecido
+    if (leader_ids !== undefined) {
+      console.log('🚨 ATUALIZANDO LÍDERES DA CÉLULA:', leader_ids);
+      
+      // Primeiro, remover todos os líderes atuais da célula
+      await pool.query('DELETE FROM cell_leaders WHERE cell_id = $1', [id]);
+      
+      // Se há líderes para adicionar
+      if (Array.isArray(leader_ids) && leader_ids.length > 0) {
+        // Verificar se todos os líderes existem e têm permissão
+        for (const leaderId of leader_ids) {
+          const leaderCheck = await pool.query(
+            'SELECT id, role FROM users WHERE id = $1 AND role IN ($2, $3, $4, $5, $6)', 
+            [leaderId, 'LIDER', 'SUPERVISOR', 'COORDENADOR', 'PASTOR', 'ADMIN']
+          );
+          if (leaderCheck.rows.length === 0) {
+            return res.status(400).json({ 
+              error: `Líder com ID ${leaderId} não encontrado ou não tem permissão para ser líder` 
+            });
+          }
+        }
+        
+        // Adicionar os novos líderes
+         for (const leaderId of leader_ids) {
+           await pool.query(
+             'INSERT INTO cell_leaders (cell_id, user_id, created_at) VALUES ($1, $2, datetime(\'now\'))',
+             [id, leaderId]
+           );
+         }
+      }
+    }
+
+    // Buscar dados atualizados da célula com líderes
+    const updatedCellQuery = `
+      SELECT c.id, c.name, c.supervisor_id, c.created_at, c.updated_at,
+             s.name as supervisor_name,
+             COUNT(DISTINCT u.id) as member_count
+      FROM cells c
+      LEFT JOIN users s ON c.supervisor_id = s.id
+      LEFT JOIN users u ON u.cell_id = c.id
+      WHERE c.id = $1
+      GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
+    `;
+    const cellResult = await pool.query(updatedCellQuery, [id]);
+    const cell = cellResult.rows[0];
+
+    // Buscar líderes da célula
+    const leadersQuery = `
+      SELECT u.id, u.name 
+      FROM cell_leaders cl
+      JOIN users u ON cl.user_id = u.id
+      WHERE cl.cell_id = $1
+    `;
+    const leadersResult = await pool.query(leadersQuery, [id]);
+
+    res.json({
+      message: 'Célula atualizada com sucesso',
+      cell: {
+        id: cell.id,
+        name: cell.name,
+        supervisor_id: cell.supervisor_id,
+        supervisor_name: cell.supervisor_name,
+        member_count: parseInt(cell.member_count) || 0,
+        leaders: leadersResult.rows.map((leader: any) => ({
+          id: leader.id,
+          name: leader.name
+        })),
+        created_at: cell.created_at,
+        updated_at: cell.updated_at
+      }
+    });
+
+  } catch (error) {
+    console.error('🚨 FALHA CRÍTICA AO ATUALIZAR CÉLULA:', error);
+    console.error('🚨 Stack trace completa:', error instanceof Error ? error.stack : 'Stack não disponível');
+    console.error('🚨 Dados da requisição:', { cellId: id, body: req.body, user: req.user?.userId });
+    
+    // Verificar tipo específico de erro para resposta mais informativa
+    if (error instanceof Error) {
+      if (error.message.includes('SQLITE_ERROR') || error.message.includes('SqliteError')) {
+        console.error('🚨 ERRO DE BANCO DE DADOS SQLite detectado');
+        return res.status(500).json({ 
+          error: 'Erro de banco de dados', 
+          message: 'Falha na operação de atualização da célula' 
+        });
+      }
+      
+      if (error.message.includes('not found') || error.message.includes('não encontrado')) {
+        return res.status(404).json({ 
+          error: 'Célula não encontrada', 
+          message: 'A célula especificada não existe' 
+        });
+      }
+    }
+    
+    res.status(500).json({ 
+      error: 'Erro interno do servidor',
+      message: 'Falha inesperada ao atualizar célula'
+    });
+  }
+});
+
 // PUT /api/cells/:id/supervisor - Designar supervisor para uma célula
 router.put('/:id/supervisor', requireLeaderOrAbove, async (req: AuthRequest, res) => {
   try {
@@ -677,6 +954,87 @@ router.put('/:id/supervisor', requireLeaderOrAbove, async (req: AuthRequest, res
   } catch (error) {
     console.error('Erro ao designar supervisor:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Buscar membros da minha célula
+router.get('/my-cell-members', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { userId } = req.user!;
+    
+    // Buscar a célula do usuário
+    const userResult = await pool.query(
+      'SELECT cell_id FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0 || !userResult.rows[0].cell_id) {
+      return res.json([]);
+    }
+
+    const cellId = userResult.rows[0].cell_id;
+
+    // Buscar todos os membros da célula (excluindo o próprio usuário)
+    const membersResult = await pool.query(`
+      SELECT id, name, email, phone, whatsapp, full_name, oikos1, oikos2
+      FROM users 
+      WHERE cell_id = $1 AND id != $2
+      ORDER BY name
+    `, [cellId, userId]);
+
+    res.json(membersResult.rows);
+  } catch (error) {
+    console.error('Erro ao buscar membros da célula:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// GET /api/cells/members-with-oikos - Buscar membros da célula do usuário com oikos
+router.get('/members-with-oikos', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { userId } = req.user!;
+
+    // Buscar dados do usuário para obter o cell_id
+    const userResult = await pool.query(`
+      SELECT cell_id FROM users WHERE id = $1
+    `, [userId]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({ message: 'Usuário não encontrado.' });
+    }
+
+    const { cell_id } = userResult.rows[0];
+
+    if (!cell_id) {
+      return res.status(200).json([]); // Usuário não pertence a nenhuma célula
+    }
+
+    // Buscar membros da célula
+    const membersResult = await pool.query(`
+      SELECT id, name, oikos1, oikos2
+      FROM users 
+      WHERE cell_id = $1
+      ORDER BY name
+    `, [cell_id]);
+
+    // Formatar os dados para incluir apenas name e oikos
+    const formattedMembers = membersResult.rows.map((member: any) => {
+      const oikos = [];
+      if (member.oikos1) oikos.push({ name: member.oikos1 });
+      if (member.oikos2) oikos.push({ name: member.oikos2 });
+      
+      return {
+        id: member.id,
+        name: member.name,
+        oikos: oikos
+      };
+    });
+
+    res.status(200).json(formattedMembers);
+
+  } catch (error) {
+    console.error('Erro ao buscar membros da célula:', error);
+    res.status(500).json({ message: 'Erro interno do servidor' });
   }
 });
 
@@ -735,7 +1093,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
              COUNT(DISTINCT u.id) as member_count
       FROM cells c
       LEFT JOIN users s ON s.id = c.supervisor_id
-      LEFT JOIN users u ON u.cell_id = c.id
+      LEFT JOIN users u ON u.cell_id = c.id AND u.status = 'ACTIVE'
       WHERE c.id = $1
       GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
     `;
@@ -757,13 +1115,26 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
       SELECT u.id, u.name, u.email
       FROM users u
       INNER JOIN cell_leaders cl ON cl.user_id = u.id
-      WHERE cl.cell_id = $1
+      WHERE cl.cell_id = $1 AND u.status = 'ACTIVE'
       ORDER BY u.name
     `;
 
     const leadersResult = await pool.query(leadersQuery, [id]);
     console.log('Resultado da query dos líderes:', leadersResult.rows);
     const leaders = leadersResult.rows;
+
+    console.log('Executando query dos membros...');
+    // Buscar membros da célula (sem referência à tabela prayers que não existe)
+    const membersQuery = `
+      SELECT u.id, u.name, u.email, u.phone, u.birth_date, u.role
+      FROM users u
+      WHERE u.cell_id = $1 AND u.status = 'ACTIVE'
+      ORDER BY u.name
+    `;
+
+    const membersResult = await pool.query(membersQuery, [id]);
+    console.log('Resultado da query dos membros:', membersResult.rows);
+    const members = membersResult.rows;
 
     const response = {
       id: cell.id,
@@ -772,6 +1143,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
       supervisor_name: cell.supervisor_name,
       member_count: cell.member_count,
       leaders: leaders,
+      members: members, // Adicionando os membros à resposta
       created_at: cell.created_at,
       updated_at: cell.updated_at
     };
@@ -862,36 +1234,6 @@ router.get('/list', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
-// Buscar membros da minha célula
-router.get('/my-cell-members', authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    const { userId } = req.user!;
-    
-    // Buscar a célula do usuário
-    const userResult = await pool.query(
-      'SELECT cell_id FROM users WHERE id = $1',
-      [userId]
-    );
 
-    if (userResult.rows.length === 0 || !userResult.rows[0].cell_id) {
-      return res.json([]);
-    }
-
-    const cellId = userResult.rows[0].cell_id;
-
-    // Buscar todos os membros da célula (excluindo o próprio usuário)
-    const membersResult = await pool.query(`
-      SELECT id, name, email, phone, whatsapp, full_name, oikos1, oikos2
-      FROM users 
-      WHERE cell_id = $1 AND id != $2
-      ORDER BY name
-    `, [cellId, userId]);
-
-    res.json(membersResult.rows);
-  } catch (error) {
-    console.error('Erro ao buscar membros da célula:', error);
-    res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-});
 
 export default router;

@@ -16,17 +16,18 @@ router.get('/', async (req: AuthRequest, res) => {
     const query = `
       SELECT 
         u.id, u.name, u.email, u.role, u.cell_id,
-        u.full_name, u.phone, u.whatsapp, u.gender,
+        u.full_name, u.phone, u.whatsapp, u.gender, 
         u.birth_city, u.birth_state, u.birth_date,
         u.address, u.address_number, u.neighborhood, u.zip_code, u.address_reference,
         u.father_name, u.mother_name, u.marital_status, u.spouse_name,
-        u.education_level, u.profession, u.conversion_date, u.transfer_info,
+        u.education_level, u.profession,
+        u.conversion_date, u.transfer_info,
         u.has_children, u.oikos1, u.oikos2,
         u.created_at, u.updated_at,
         c.name as cell_name
       FROM users u
       LEFT JOIN cells c ON u.cell_id = c.id
-      WHERE u.id = ?
+      WHERE u.id = ? AND u.status = 'ACTIVE'
     `;
 
     const result = await pool.query(query, [userId]);
@@ -37,12 +38,24 @@ router.get('/', async (req: AuthRequest, res) => {
 
     const user = result.rows[0];
 
+    // Verificar se o usuário é secretário de alguma célula
+    const secretaryQuery = `
+      SELECT COUNT(*) as count
+      FROM cells
+      WHERE secretary_id = ?
+    `;
+    const secretaryResult = await pool.query(secretaryQuery, [userId]);
+    const isCellSecretary = parseInt(secretaryResult.rows[0].count) > 0;
+
     // Remover password_hash da resposta
     const { password_hash, ...userProfile } = user;
 
     res.json({
       message: 'Perfil obtido com sucesso',
-      user: userProfile
+      user: {
+        ...userProfile,
+        isCellSecretary
+      }
     });
 
   } catch (error) {
@@ -54,14 +67,17 @@ router.get('/', async (req: AuthRequest, res) => {
 // PUT /api/me - Atualizar dados do perfil do usuário logado
 router.put('/', async (req: AuthRequest, res) => {
   try {
+    // LOG CRÍTICO PARA DEPURAÇÃO
+    console.log("PAYLOAD RECEBIDO NO BACKEND:", req.body);
+    
     const { userId } = req.user!;
     const {
       name, full_name, phone, whatsapp, gender,
       birth_city, birth_state, birth_date,
       address, address_number, neighborhood, zip_code, address_reference,
       father_name, mother_name, marital_status, spouse_name,
-      education_level, profession, conversion_date, transfer_info,
-      has_children, oikos1, oikos2
+      education_level, education_course, profession, conversion_date, transfer_info,
+      has_children, oikos1_name, oikos2_name
     } = req.body;
 
     // Construir query de atualização dinamicamente
@@ -74,8 +90,10 @@ router.put('/', async (req: AuthRequest, res) => {
       birth_city, birth_state, birth_date,
       address, address_number, neighborhood, zip_code, address_reference,
       father_name, mother_name, marital_status, spouse_name,
-      education_level, profession, conversion_date, transfer_info,
-      has_children, oikos1, oikos2
+      education_level, education_course, profession, conversion_date, transfer_info,
+      has_children, 
+      oikos1: oikos1_name, 
+      oikos2: oikos2_name
     };
 
     // Adicionar campos que foram fornecidos

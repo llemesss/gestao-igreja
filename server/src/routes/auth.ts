@@ -22,7 +22,7 @@ router.post('/register', async (req, res) => {
     }
 
     // Verificar se email já existe
-    const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    const existingUser = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
     if (existingUser.rows.length > 0) {
       return res.status(400).json({ error: 'Email já está em uso' });
     }
@@ -34,7 +34,7 @@ router.post('/register', async (req, res) => {
     // Criar usuário
     const userId = uuidv4();
     const result = await pool.query(
-      'INSERT INTO users (id, name, email, password_hash, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, role',
+      'INSERT INTO users (id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?) RETURNING id, name, email, role',
       [userId, name, email, password_hash, 'MEMBRO']
     );
 
@@ -77,9 +77,13 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email e senha são obrigatórios' });
     }
 
-    // Buscar usuário
+    // Buscar usuário com célula associada
     const result = await pool.query(
-      'SELECT id, name, email, password_hash, role FROM users WHERE email = $1',
+      `SELECT u.id, u.name, u.email, u.password_hash, u.role, u.cell_id,
+              c.id as cell_table_id, c.name as cell_name
+       FROM users u
+       LEFT JOIN cells c ON u.cell_id = c.id
+       WHERE u.email = ?`,
       [email]
     );
 
@@ -111,7 +115,9 @@ router.post('/login', async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        cell_id: user.cell_id,
+        cell_name: user.cell_name
       },
       token
     });

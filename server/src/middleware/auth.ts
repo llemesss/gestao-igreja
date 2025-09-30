@@ -38,6 +38,7 @@ export const requireRole = (roles: UserRole[]) => {
   };
 };
 
-export const requireAdmin = requireRole(['ADMIN']);
+export const requireAdmin = requireRole(['ADMIN', 'SUPERVISOR']);
 export const requireLeaderOrAbove = requireRole(['LIDER', 'SUPERVISOR', 'COORDENADOR', 'PASTOR', 'ADMIN']);
 export const requireSupervisorOrAbove = requireRole(['SUPERVISOR', 'COORDENADOR', 'PASTOR', 'ADMIN']);
+export const requireAuth = authenticateToken;

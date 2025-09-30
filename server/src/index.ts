@@ -8,26 +8,14 @@ import prayerRoutes from './routes/prayers';
 import meRoutes from './routes/me';
 
 // Carregar variáveis de ambiente
-dotenv.config();
+dotenv.config({ path: '.env.local' });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 console.log('🔧 Configurando middlewares...');
 
-// Middleware de log PRIMEIRO - antes de tudo
-console.log('🔧 Adicionando middleware de log PRIMEIRO...');
-app.use((req, res, next) => {
-  console.log(`🚨 MIDDLEWARE LOG ATIVADO: ${new Date().toISOString()}`);
-  console.log(`🚨 ${req.method} ${req.originalUrl}`);
-  console.log(`🚨 Path: ${req.path}`);
-  console.log(`🚨 Headers:`, req.headers);
-  console.log(`🚨 Body:`, req.body);
-  console.log('🚨 ========================');
-  next();
-});
-
-// Middlewares
+// Middlewares de parsing PRIMEIRO
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   credentials: true
@@ -35,6 +23,8 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Middleware de log removido para reduzir poluição no terminal
 
 console.log('NODE_ENV:', process.env.NODE_ENV);
 console.log('🔧 Configurando rotas...');
@@ -45,6 +35,14 @@ app.use('/api/users', userRoutes);
 app.use('/api/cells', cellRoutes);
 app.use('/api/prayers', prayerRoutes);
 app.use('/api/me', meRoutes);
+
+// ==========================================================
+// ROTA DE TESTE GLOBAL PARA ISOLAMENTO DO PROBLEMA
+app.get('/api/ping', (req, res) => {
+  console.log('[BACKEND GLOBAL TEST] A rota /api/ping foi chamada com sucesso!');
+  res.status(200).send('Pong! O servidor está vivo e respondendo.');
+});
+// ==========================================================
 
 // Rota de health check
 app.get('/api/health', (req, res) => {

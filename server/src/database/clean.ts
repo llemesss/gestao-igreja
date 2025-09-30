@@ -3,20 +3,21 @@ import { v4 as uuidv4 } from 'uuid';
 import pool from './connection';
 import initDatabase from './init';
 
-async function seedDatabase() {
+async function cleanDatabase() {
   try {
-    console.log('🌱 Iniciando seed do banco de dados...');
+    console.log('🧹 Limpando banco de dados...');
 
     // Primeiro, inicializar o banco (criar tabelas)
     await initDatabase();
 
-    // Limpar dados existentes para evitar conflitos
+    // Limpar todos os dados
+    pool.query('DELETE FROM prayer_logs');
     pool.query('DELETE FROM cell_leaders');
     pool.query('UPDATE users SET cell_id = NULL');
     pool.query('DELETE FROM cells');
     pool.query('DELETE FROM users');
 
-    // Criar apenas usuário admin
+    // Criar apenas o usuário admin
     const adminId = uuidv4();
     const hashedPassword = await bcrypt.hash('admin123', 10);
 
@@ -25,19 +26,23 @@ async function seedDatabase() {
       VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `, [adminId, 'Administrador', 'admin@igreja.com', hashedPassword, 'ADMIN']);
 
-    console.log('✅ Seed concluído com sucesso!');
-    console.log('\n📋 Usuário criado:');
+    console.log('✅ Limpeza concluída com sucesso!');
+    console.log('\n📋 Usuário mantido:');
     console.log('👑 Admin: admin@igreja.com / admin123');
-    console.log('\n🏠 Nenhuma célula criada - células devem ser criadas manualmente pelo admin.');
+    console.log('\n🗑️ Removidos:');
+    console.log('- Todas as células');
+    console.log('- Todos os membros (exceto admin)');
+    console.log('- Todos os líderes de células');
+    console.log('- Todos os logs de oração');
 
   } catch (error) {
-    console.error('❌ Erro no seed:', error);
+    console.error('❌ Erro na limpeza:', error);
   }
 }
 
-// Executar seed se chamado diretamente
+// Executar limpeza se chamado diretamente
 if (require.main === module) {
-  seedDatabase();
+  cleanDatabase();
 }
 
-export default seedDatabase;
+export default cleanDatabase;
