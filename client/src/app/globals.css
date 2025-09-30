@@ -1,0 +1,261 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Classes globais para padronização de modais */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px); /* Efeito blur no fundo */
+}
+
+.modal-content {
+  background: white; /* Fundo branco */
+  padding: 2rem;
+  border-radius: 12px; /* Bordas arredondadas */
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); /* Sombra */
+  width: 90%;
+  max-width: 500px; /* Ajuste conforme necessário */
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* Estilos globais para elementos div e td */
+div {
+  color: #374151; /* Cinza escuro (gray-700) */
+}
+
+td {
+  color: #374151; /* Cinza escuro (gray-700) */
+}
+
+/* Oculta a ficha completa na visualização normal da tela */
+.printable-area {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 2cm;
+  }
+
+  /* Garante que o body não interfira no layout */
+  body {
+    background-color: #fff !important;
+  }
+
+  /* Esconde TUDO que não é a nossa área de impressão */
+  body > *:not(.printable-area) {
+    display: none !important;
+  }
+
+  /* Prepara a área de impressão para ser o único elemento visível e formatado */
+  .printable-area {
+    display: block !important; /* Força a exibição */
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    color: #000;
+    font-size: 10pt;
+  }
+
+  .print-title {
+    text-align: center;
+    font-size: 16pt;
+    margin-bottom: 25px;
+  }
+
+  .print-section {
+    margin-bottom: 20px;
+    page-break-inside: avoid;
+  }
+
+  .print-section h3 {
+    font-size: 12pt;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #000;
+    padding-bottom: 5px;
+  }
+
+  .print-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+
+  .calendar-container {
+    margin: 15px 0;
+  }
+
+  .calendar-legend {
+    margin-top: 15px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    font-size: 9pt;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .legend-color {
+    width: 12px;
+    height: 12px;
+    border: 1px solid #000;
+  }
+
+  .prayer-color {
+    background-color: #4CAF50;
+  }
+
+  .invalid-color {
+    background-color: #333;
+  }
+
+  .empty-color {
+    background-color: white;
+  }
+
+  .print-section {
+    margin-bottom: 15px;
+  }
+
+  .print-section h4 {
+    font-size: 12pt;
+    border-bottom: 1px solid #000;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+  }
+}
+
+/* Estilos para o Modal de Detalhes do Membro */
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-header h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.print-button {
+  /* Estilize o botão de imprimir como desejar */
+  padding: 0.5rem 1rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background-color: #f9fafb;
+  cursor: pointer;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #9ca3af;
+}
+
+.modal-body {
+  padding-top: 1.5rem;
+}
+
+.profile-summary {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.profile-name {
+  font-size: 1.125rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.profile-contact {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin: 0.25rem 0 0;
+}
+
+.divider {
+  border: 0;
+  height: 1px;
+  background-color: #e5e7eb;
+  margin: 1.5rem 0;
+}
+
+.stats-section h4 {
+  font-size: 1rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr); /* Cria duas colunas */
+  gap: 1rem;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: #6b7280;
+  text-transform: uppercase;
+}
