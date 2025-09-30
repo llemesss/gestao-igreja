@@ -8,9 +8,11 @@ const { v4: uuidv4 } = require('uuid');
 exports.handler = async function(event) {
   // --- Bloco de Configuração de CORS ---
   const headers = {
-    'Access-Control-Allow-Origin': '*', // Permite qualquer origem. Para produção, substitua '*' pela URL do seu frontend.
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept, Origin',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Credentials': 'true',
+    'Content-Type': 'application/json'
   };
 
   // Resposta para a requisição "preflight" do navegador

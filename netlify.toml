@@ -1,6 +1,6 @@
 [build]
   base = "client"
-  publish = ".next"
+  publish = "client/.next"
   command = "npm run build"
 
 [build.environment]
@@ -10,9 +10,13 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
   status = 200
 
 # Configurações para SPA (Single Page Application)
@@ -23,3 +27,13 @@
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# Configurações CORS para Netlify Functions
+[[headers]]
+  for = "/.netlify/functions/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Headers = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+    Access-Control-Allow-Methods = "GET, POST, PUT, DELETE, OPTIONS"
+    Access-Control-Allow-Credentials = "true"

@@ -8,6 +8,13 @@ import CellCard from '@/components/CellCard';
 import SupervisedCellCard from '@/components/SupervisedCellCard';
 import { User, PrayerStats, Cell } from '@/types';
 
+// Configuração da API
+const API_URL = process.env.NEXT_PUBLIC_API_URL || (
+  process.env.NODE_ENV === 'production' 
+    ? '/.netlify/functions' 
+    : 'http://localhost:5000/api'
+);
+
 interface DashboardSupervisorViewProps {
   user: User;
   prayerStats?: PrayerStats | null;
@@ -31,7 +38,7 @@ export default function DashboardSupervisorView({
         return;
       }
 
-      const response = await fetch('http://localhost:5000/api/prayers', {
+      const response = await fetch(`${API_URL}/prayers`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

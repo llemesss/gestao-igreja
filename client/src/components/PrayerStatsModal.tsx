@@ -2,6 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { auth } from '@/lib/auth';
 import { X } from 'lucide-react';
 
+// Configuração da API
+const API_URL = process.env.NEXT_PUBLIC_API_URL || (
+  process.env.NODE_ENV === 'production' 
+    ? '/.netlify/functions' 
+    : 'http://localhost:5000/api'
+);
+
 interface PrayerStatsData {
   stats?: {
     total_prayers: number;
@@ -52,8 +59,8 @@ export function PrayerStatsModal({ isOpen, onClose, userId }: PrayerStatsModalPr
 
       // Se userId for fornecido, busca estatísticas de outro usuário, senão busca as próprias
       const endpoint = userId 
-        ? `http://localhost:5000/api/prayers/stats/${userId}`
-        : 'http://localhost:5000/api/prayers/my-stats';
+        ? `${API_URL}/prayers/stats/${userId}`
+        : `${API_URL}/prayers/my-stats`;
 
       console.log('Endpoint:', endpoint);
       console.log('UserId:', userId);

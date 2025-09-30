@@ -4,7 +4,12 @@ import { AuthResponse, LoginCredentials, RegisterData } from '@/types';
 import { auth } from './auth';
 
 // Usar variável de ambiente para a URL da API
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+// Em produção no Netlify, usar as Netlify Functions
+const API_URL = process.env.NEXT_PUBLIC_API_URL || (
+  process.env.NODE_ENV === 'production' 
+    ? '/.netlify/functions' 
+    : 'http://localhost:5000/api'
+);
 
 // Criar instância do axios
 const apiClient = axios.create({

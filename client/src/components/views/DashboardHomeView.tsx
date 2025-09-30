@@ -10,6 +10,13 @@ import { api } from '@/lib/api';
 import { CreateEditCellModal } from '@/components/CreateEditCellModal';
 import { User, PrayerStats, Cell } from '@/types';
 
+// Configuração da API
+const API_URL = process.env.NEXT_PUBLIC_API_URL || (
+  process.env.NODE_ENV === 'production' 
+    ? '/.netlify/functions' 
+    : 'http://localhost:5000/api'
+);
+
 interface Leader {
   id: string;
   name: string;
@@ -121,7 +128,7 @@ export default function DashboardHomeView({ user, prayerStats, cells = [], userC
         return;
       }
 
-      const response = await fetch('http://localhost:5000/api/prayers', {
+      const response = await fetch(`${API_URL}/prayers`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
