@@ -4,6 +4,9 @@
 
 # Configurações do processo de build.
 [build]
+  # Define explicitamente a raiz do projeto como diretório base
+  base = "."
+  
   # O comando de build é executado a partir da RAIZ do projeto.
   # Passo 1: "npm install" -> Instala as dependências das funções (de netlify/functions/package.json).
   # Passo 2: "(cd client && npm install && npm run build)" -> Entra na pasta do frontend,
