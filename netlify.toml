@@ -1,24 +1,31 @@
-# Arquivo: netlify.toml (VERSÃO CORRIGIDA E FINAL)
+# =============================================================================
+# ARQUIVO DE CONFIGURAÇÃO DEFINITIVO PARA NETLIFY
+# =============================================================================
 
+# Configurações do processo de build.
 [build]
-  # 1. O comando é executado a partir da raiz do projeto.
-  # 2. Primeiro, ele instala as dependências das funções (do netlify/functions/package.json).
-  # 3. Depois, ele entra na pasta 'client', instala as dependências do frontend E as devDependencies, e faz o build.
+  # O comando de build é executado a partir da RAIZ do projeto.
+  # Passo 1: "npm install" -> Instala as dependências das funções (de netlify/functions/package.json).
+  # Passo 2: "(cd client && npm install && npm run build)" -> Entra na pasta do frontend,
+  #          instala SUAS dependências (incluindo devDependencies) e executa o build do Next.js.
   command = "npm install && (cd client && npm install && npm run build)"
   
-  # O caminho de publicação é relativo à raiz.
+  # Diretório contendo o resultado do build do Next.js, relativo à raiz.
   publish = "client/.next"
   
-  # O caminho das funções é relativo à raiz.
+  # Diretório contendo as funções serverless, relativo à raiz.
   functions = "netlify/functions"
 
+# Plugin essencial para otimizar o deploy de sites Next.js na Netlify.
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-# Headers de CORS para as funções.
+# Regras de cabeçalhos (Headers) para a API.
 [[headers]]
+  # Aplica as regras abaixo para todas as requisições às suas funções.
   for = "/.netlify/functions/*"
   [headers.values]
+    # Resolve o erro de CORS, permitindo que seu frontend se comunique com o backend.
     Access-Control-Allow-Origin = "*"
-    Access-Control-Allow-Methods = "POST, OPTIONS"
+    Access-Control-Allow-Methods = "POST, GET, PUT, DELETE, OPTIONS"
     Access-Control-Allow-Headers = "Content-Type, Authorization"
