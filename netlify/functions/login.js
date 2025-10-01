@@ -1,0 +1,65 @@
+// Local do arquivo: netlify/functions/auth/login.js
+
+const { Client } = require('pg');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+exports.handler = async function(event) {
+  // Resposta para a requisição "preflight" do navegador
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 204,
+      body: '',
+    };
+  }
+
+  // Validação do método
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+  }
+
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
+  
+  try {
+    const { email, password } = JSON.parse(event.body);
+
+    if (!email || !password) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'Email e senha são obrigatórios' }) };
+    }
+    
+    await client.connect();
+    
+    const result = await client.query('SELECT * FROM users WHERE email = $1', [email]);
+    const user = result.rows[0];
+
+    if (!user || !bcrypt.compareSync(password, user.password)) {
+      return { statusCode: 401, body: JSON.stringify({ error: 'Credenciais inválidas' }) };
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPINRES_IN || '1h' } // Corrigido de 'EXPINRES' para 'EXPIRES'
+    );
+    
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ 
+        token,
+        user: { id: user.id, name: user.name, email: user.email, role: user.role }
+      }),
+    };
+
+  } catch (error) {
+    console.error('Login Error:', error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'Erro interno do servidor.' }),
+    };
+  } finally {
+    await client.end();
+  }
+};
