@@ -1,37 +1,12 @@
-# =============================================================================
-# ARQUIVO DE CONFIGURAÇÃO DEFINITIVO PARA NETLIFY
-# =============================================================================
+# ARQUIVO DE CONFIGURAÇÃO FINAL E SIMPLIFICADO
 
-# Configurações do processo de build.
 [build]
-  # Define explicitamente a raiz do projeto como diretório base
-  base = "."
-  
-  # O comando de build é executado a partir da RAIZ do projeto.
-  # Passo 1: "npm install" -> Instala as dependências das funções (de netlify/functions/package.json).
-  # Passo 2: "(cd client && npm install --include=dev && npm run build)" -> Entra na pasta do frontend,
-  #          instala SUAS dependências (incluindo devDependencies explicitamente) e executa o build do Next.js.
-  command = "npm install && (cd client && npm install --include=dev && npm run build)"
-  
-  # Diretório contendo o resultado do build do Next.js, relativo à raiz.
+  command = "cd client && npm install && npm run build"
   publish = "client/.next"
-  
-  # Diretório contendo as funções serverless, relativo à raiz.
   functions = "netlify/functions"
 
-# Define a versão do Node.js para o ambiente de build, para garantir compatibilidade.
 [build.environment]
   NODE_VERSION = "22.12.0"
 
-# Plugin essencial para otimizar o deploy de sites Next.js na Netlify.
 [[plugins]]
   package = "@netlify/plugin-nextjs"
-
-# Regras de cabeçalhos (Headers) para a API.
-[[headers]]
-  # Aplica as regras abaixo para todas as requisições às suas funções.
-  for = "/.netlify/functions/*"
-  [headers.values]
-    Access-Control-Allow-Origin = "*"
-    Access-Control-Allow-Methods = "POST, GET, PUT, DELETE, OPTIONS"
-    Access-Control-Allow-Headers = "Content-Type, Authorization"
