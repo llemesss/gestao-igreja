@@ -16,7 +16,6 @@
   # Diretório contendo as funções serverless, relativo à raiz.
   functions = "netlify/functions"
 
-# Plugin essencial para otimizar o deploy de sites Next.js na Netlify.
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
@@ -25,7 +24,6 @@
   # Aplica as regras abaixo para todas as requisições às suas funções.
   for = "/.netlify/functions/*"
   [headers.values]
-    # Resolve o erro de CORS, permitindo que seu frontend se comunique com o backend.
     Access-Control-Allow-Origin = "*"
     Access-Control-Allow-Methods = "POST, GET, PUT, DELETE, OPTIONS"
     Access-Control-Allow-Headers = "Content-Type, Authorization"
