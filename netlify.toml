@@ -1,31 +1,17 @@
-# =============================================================================
-# ARQUIVO DE CONFIGURAÇÃO DEFINITIVO PARA NETLIFY
-# =============================================================================
-
-# Bloco de configurações de build.
 [build]
-  # O comando é executado a partir da RAIZ do projeto.
-  # Instala as dependências das funções, depois entra na pasta 'client',
-  # instala as dependências do frontend e executa o build.
-  command = "npm install && (cd client && npm install && npm run build)"
-  
-  # Diretório contendo o resultado do build do Next.js, relativo à raiz.
-  publish = "client/.next"
-  
-  # Diretório contendo as funções serverless, relativo à raiz.
-  functions = "netlify/functions"
+  # Agora o comando roda dentro de client direto, sem duplicar caminho.
+  base = "client"
+  command = "npm install && npm run build"
+  publish = ".next"
+  functions = "../netlify/functions"
 
-# Define a versão do Node.js para o ambiente de build, resolvendo o aviso EBADENGINE.
 [build.environment]
-  NODE_VERSION = "22.12.0" # Usando uma versão compatível exigida pela dependência.
+  NODE_VERSION = "22.12.0"
 
-# Plugin essencial para otimizar o deploy de sites Next.js na Netlify.
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-# Regras de cabeçalhos (Headers) para a API.
 [[headers]]
-  # Aplica as regras abaixo para todas as requisições às suas funções.
   for = "/.netlify/functions/*"
   [headers.values]
     Access-Control-Allow-Origin = "*"
