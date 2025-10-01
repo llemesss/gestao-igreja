@@ -1,12 +1,23 @@
-# ARQUIVO DE CONFIGURAÇÃO FINAL E SIMPLIFICADO
+# =============================================================================
+# ARQUIVO DE CONFIGURAÇÃO DEFINITIVO E ÚNICO PARA NETLIFY
+# =============================================================================
 
 [build]
-  command = "cd client && npm install && npm run build"
+  # O comando é executado a partir da RAIZ do projeto.
+  # Isso permite que a Netlify encontre tanto o 'client' quanto as 'functions'.
+  # Passo 1: "npm install" -> Instala as dependências das funções (de netlify/functions/package.json).
+  # Passo 2: "(cd client && npm install && npm run build)" -> Entra na pasta do frontend,
+  #          instala TODAS as suas dependências (incluindo devDependencies) e executa o build.
+  command = "npm install && (cd client && npm install && npm run build)"
+  
+  # Diretório contendo o resultado do build, relativo à raiz.
   publish = "client/.next"
+  
+  # Diretório contendo as funções, relativo à raiz.
   functions = "netlify/functions"
 
 [build.environment]
-  NODE_VERSION = "22.12.0"
+  NODE_VERSION = "22.12.0" # Define uma versão moderna e compatível do Node.js
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
