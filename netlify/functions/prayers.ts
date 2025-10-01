@@ -72,21 +72,21 @@ export const handler: Handler = async (event, context) => {
 
       // Lógica de UPSERT - verificar se já existe registro para hoje
       const existingRecord = await pool.query(
-        'SELECT id FROM daily_prayer_log WHERE user_id = ? AND prayer_date = ?',
+        'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2',
         [userId, today]
       );
 
       if (existingRecord.rows.length > 0) {
         // Atualizar timestamp se já existe
         await pool.query(
-          'UPDATE daily_prayer_log SET updated_at = datetime(\'now\') WHERE user_id = ? AND prayer_date = ?',
+          'UPDATE daily_prayer_log SET updated_at = NOW() WHERE user_id = $1 AND prayer_date = $2',
           [userId, today]
         );
       } else {
         // Criar novo registro se não existe
         const recordId = uuidv4();
         await pool.query(
-          'INSERT INTO daily_prayer_log (id, user_id, prayer_date, created_at, updated_at) VALUES (?, ?, ?, datetime(\'now\'), datetime(\'now\'))',
+          'INSERT INTO daily_prayer_log (id, user_id, prayer_date, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())',
           [recordId, userId, today]
         );
       }
@@ -108,7 +108,7 @@ export const handler: Handler = async (event, context) => {
 
       // Verificar se já orou hoje
       const existingPrayer = await pool.query(
-        'SELECT id FROM daily_prayer_log WHERE user_id = ? AND prayer_date = ?',
+        'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2',
         [userId, today]
       );
 
@@ -123,7 +123,7 @@ export const handler: Handler = async (event, context) => {
       // Registrar oração
       const prayerId = uuidv4();
       await pool.query(
-        'INSERT INTO daily_prayer_log (id, user_id, prayer_date) VALUES (?, ?, ?)',
+        'INSERT INTO daily_prayer_log (id, user_id, prayer_date) VALUES ($1, $2, $3)',
         [prayerId, userId, today]
       );
 
@@ -149,7 +149,7 @@ export const handler: Handler = async (event, context) => {
 
       // Verificar se existe registro de oração para hoje
       const existingRecord = await pool.query(
-        'SELECT id FROM daily_prayer_log WHERE user_id = ? AND prayer_date = ?',
+        'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2',
         [userId, today]
       );
 
@@ -169,11 +169,11 @@ export const handler: Handler = async (event, context) => {
       // Calcular contagens para semana e mês usando a tabela correta
       const statsQuery = `
         SELECT 
-          COUNT(CASE WHEN prayer_date >= date('now', '-7 days') THEN 1 END) as prayersThisWeek,
-          COUNT(CASE WHEN prayer_date >= date('now', 'start of month') THEN 1 END) as prayersThisMonth,
-          COUNT(CASE WHEN prayer_date = date('now') THEN 1 END) > 0 as prayersToday
+          COUNT(CASE WHEN prayer_date >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as prayersThisWeek,
+          COUNT(CASE WHEN prayer_date >= DATE_TRUNC('month', CURRENT_DATE) THEN 1 END) as prayersThisMonth,
+          COUNT(CASE WHEN prayer_date = CURRENT_DATE THEN 1 END) > 0 as prayersToday
         FROM daily_prayer_log 
-        WHERE user_id = ?
+        WHERE user_id = $1
       `;
 
       const statsResult = await pool.query(statsQuery, [userId]);
@@ -199,12 +199,12 @@ export const handler: Handler = async (event, context) => {
       const statsQuery = `
         SELECT 
           COUNT(*) as total_prayers,
-          COUNT(CASE WHEN prayer_date >= date('now', '-${days} days') THEN 1 END) as recent_prayers,
-          COUNT(CASE WHEN prayer_date >= date('now', '-7 days') THEN 1 END) as week_prayers,
+          COUNT(CASE WHEN prayer_date >= CURRENT_DATE - INTERVAL '${days} days' THEN 1 END) as recent_prayers,
+          COUNT(CASE WHEN prayer_date >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as week_prayers,
           MAX(prayer_date) as last_prayer_date,
           MIN(prayer_date) as first_prayer_date
         FROM daily_prayer_log 
-        WHERE user_id = ?
+        WHERE user_id = $1
       `;
 
       const statsResult = await pool.query(statsQuery, [userId]);
@@ -214,7 +214,7 @@ export const handler: Handler = async (event, context) => {
       const historyQuery = `
         SELECT prayer_date
         FROM daily_prayer_log 
-        WHERE user_id = ? AND prayer_date >= date('now', '-${days} days')
+        WHERE user_id = $1 AND prayer_date >= CURRENT_DATE - INTERVAL '${days} days'
         ORDER BY prayer_date DESC
       `;
 
@@ -262,7 +262,7 @@ export const handler: Handler = async (event, context) => {
         const permissionQuery = `
           SELECT u.cell_id
           FROM users u
-          WHERE u.id = ? AND u.status = 'ACTIVE'
+          WHERE u.id = $1 AND u.status = 'ACTIVE'
         `;
         
         const targetUserResult = await pool.query(permissionQuery, [targetUserId]);
@@ -272,13 +272,13 @@ export const handler: Handler = async (event, context) => {
           
           if (role === 'SUPERVISOR') {
             const supervisionCheck = await pool.query(
-              'SELECT id FROM cells WHERE id = ? AND supervisor_id = ?',
+              'SELECT id FROM cells WHERE id = $1 AND supervisor_id = $2',
               [targetUserCellId, userId]
             );
             hasPermission = supervisionCheck.rows.length > 0;
           } else if (role === 'LIDER') {
             const leadershipCheck = await pool.query(
-              'SELECT cell_id FROM cell_leaders WHERE cell_id = ? AND user_id = ?',
+              'SELECT cell_id FROM cell_leaders WHERE cell_id = $1 AND user_id = $2',
               [targetUserCellId, userId]
             );
             hasPermission = leadershipCheck.rows.length > 0;
@@ -299,7 +299,7 @@ export const handler: Handler = async (event, context) => {
         SELECT u.id, u.name, u.email, u.role, c.name as cell_name
         FROM users u
         LEFT JOIN cells c ON u.cell_id = c.id
-        WHERE u.id = ? AND u.status = 'ACTIVE'
+        WHERE u.id = $1 AND u.status = 'ACTIVE'
       `;
 
       const userResult = await pool.query(userQuery, [targetUserId]);
@@ -329,43 +329,43 @@ export const handler: Handler = async (event, context) => {
         pool.query(`
           SELECT COUNT(*) as count
           FROM daily_prayer_log
-          WHERE user_id = ? AND DATE(prayer_date) = DATE(?)
+          WHERE user_id = $1 AND prayer_date::date = $2::date
         `, [targetUserId, today.toISOString().split('T')[0]]),
         
         pool.query(`
           SELECT COUNT(*) as count
           FROM daily_prayer_log
-          WHERE user_id = ? AND prayer_date >= ?
+          WHERE user_id = $1 AND prayer_date >= $2
         `, [targetUserId, sevenDaysAgo.toISOString().split('T')[0]]),
         
         pool.query(`
           SELECT COUNT(*) as count
           FROM daily_prayer_log
-          WHERE user_id = ? AND prayer_date >= ?
+          WHERE user_id = $1 AND prayer_date >= $2
         `, [targetUserId, startOfMonth.toISOString().split('T')[0]]),
         
         pool.query(`
           SELECT COUNT(*) as count
           FROM daily_prayer_log
-          WHERE user_id = ?
+          WHERE user_id = $1
         `, [targetUserId]),
         
         pool.query(`
           SELECT MAX(prayer_date) as last_prayer
           FROM daily_prayer_log
-          WHERE user_id = ?
+          WHERE user_id = $1
         `, [targetUserId])
       ]);
 
       // Histórico dos últimos 7 dias para o gráfico
       const historyQuery = `
         SELECT 
-          DATE(prayer_date) as date,
+          prayer_date::date as date,
           COUNT(*) as count
         FROM daily_prayer_log 
-        WHERE user_id = ? AND prayer_date >= DATE('now', '-7 days')
-        GROUP BY DATE(prayer_date)
-        ORDER BY DATE(prayer_date) DESC
+        WHERE user_id = $1 AND prayer_date >= CURRENT_DATE - INTERVAL '7 days'
+        GROUP BY prayer_date::date
+        ORDER BY prayer_date::date DESC
       `;
 
       const historyResult = await pool.query(historyQuery, [targetUserId]);
@@ -374,7 +374,7 @@ export const handler: Handler = async (event, context) => {
       const firstPrayerResult = await pool.query(`
         SELECT MIN(prayer_date) as first_prayer
         FROM daily_prayer_log
-        WHERE user_id = ?
+        WHERE user_id = $1
       `, [targetUserId]);
 
       let averagePerWeek = 0;
@@ -390,7 +390,7 @@ export const handler: Handler = async (event, context) => {
       const streakQuery = `
         SELECT prayer_date
         FROM daily_prayer_log
-        WHERE user_id = ?
+        WHERE user_id = $1
         ORDER BY prayer_date DESC
       `;
       const streakResult = await pool.query(streakQuery, [targetUserId]);

@@ -96,7 +96,7 @@ export const handler: Handler = async (event, context) => {
             FROM cells c
             LEFT JOIN users s ON c.supervisor_id = s.id
             LEFT JOIN users u ON u.cell_id = c.id AND u.status = 'ACTIVE'
-            WHERE c.supervisor_id = ?
+            WHERE c.supervisor_id = $1
             GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
             ORDER BY c.name ASC
           `;
@@ -112,7 +112,7 @@ export const handler: Handler = async (event, context) => {
             FROM cells c
             LEFT JOIN users s ON c.supervisor_id = s.id
             LEFT JOIN users u ON u.cell_id = c.id AND u.status = 'ACTIVE'
-            WHERE c.id IN (SELECT cell_id FROM cell_leaders WHERE user_id = ?)
+            WHERE c.id IN (SELECT cell_id FROM cell_leaders WHERE user_id = $1)
             GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
             ORDER BY c.name ASC
           `;
@@ -128,7 +128,7 @@ export const handler: Handler = async (event, context) => {
             FROM cells c
             LEFT JOIN users s ON c.supervisor_id = s.id
             LEFT JOIN users u ON u.cell_id = c.id AND u.status = 'ACTIVE'
-            WHERE c.id = (SELECT cell_id FROM users WHERE id = ?)
+            WHERE c.id = (SELECT cell_id FROM users WHERE id = $1)
             GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
             ORDER BY c.name ASC
           `;
@@ -161,7 +161,7 @@ export const handler: Handler = async (event, context) => {
                s.name as supervisor_name
         FROM cells c
         LEFT JOIN users s ON c.supervisor_id = s.id
-        WHERE c.id = ?
+        WHERE c.id = $1
       `, [cellId]);
 
       if (result.rows.length === 0) {
@@ -188,7 +188,7 @@ export const handler: Handler = async (event, context) => {
                u.birth_date, u.age_group, u.gender, u.marital_status,
                u.oikos1, u.oikos2, u.created_at
         FROM users u
-        WHERE u.cell_id = ? AND u.status = 'ACTIVE'
+        WHERE u.cell_id = $1 AND u.status = 'ACTIVE'
         ORDER BY u.name ASC
       `, [cellId]);
 

@@ -81,7 +81,7 @@ export const handler: Handler = async (event, context) => {
           c.name as cell_name
         FROM users u
         LEFT JOIN cells c ON u.cell_id = c.id
-        WHERE u.id = ? AND u.status = 'ACTIVE'
+        WHERE u.id = $1 AND u.status = 'ACTIVE'
       `;
 
       const result = await pool.query(query, [userId]);
@@ -100,7 +100,7 @@ export const handler: Handler = async (event, context) => {
       const secretaryQuery = `
         SELECT COUNT(*) as count
         FROM cells
-        WHERE secretary_id = ?
+        WHERE secretary_id = $1
       `;
       const secretaryResult = await pool.query(secretaryQuery, [userId]);
       const isCellSecretary = parseInt(secretaryResult.rows[0].count) > 0;
@@ -151,10 +151,12 @@ export const handler: Handler = async (event, context) => {
       };
 
       // Adicionar campos que foram fornecidos
+      let paramIndex = 1;
       Object.entries(fields).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
-          updates.push(`${key} = ?`);
+          updates.push(`${key} = $${paramIndex}`);
           params.push(value);
+          paramIndex++;
         }
       });
 
@@ -167,7 +169,7 @@ export const handler: Handler = async (event, context) => {
       }
 
       // Adicionar updated_at
-      updates.push('updated_at = datetime(\'now\')');
+      updates.push('updated_at = NOW()');
       
       // Adicionar userId para WHERE
       params.push(userId);
@@ -175,7 +177,7 @@ export const handler: Handler = async (event, context) => {
       const query = `
         UPDATE users 
         SET ${updates.join(', ')}
-        WHERE id = ?
+        WHERE id = $${paramIndex}
       `;
 
       await pool.query(query, params);
@@ -194,7 +196,7 @@ export const handler: Handler = async (event, context) => {
           c.name as cell_name
         FROM users u
         LEFT JOIN cells c ON u.cell_id = c.id
-        WHERE u.id = ?
+        WHERE u.id = $1
       `;
 
       const updatedResult = await pool.query(updatedUserQuery, [userId]);

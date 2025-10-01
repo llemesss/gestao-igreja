@@ -100,7 +100,7 @@ export const handler: Handler = async (event, context) => {
             FROM cells c
             LEFT JOIN users s ON c.supervisor_id = s.id
             LEFT JOIN users u ON u.cell_id = c.id AND u.status = 'ACTIVE'
-            WHERE c.supervisor_id = ?
+            WHERE c.supervisor_id = $1
             GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
             ORDER BY c.name
           `, [userId]);
@@ -117,7 +117,7 @@ export const handler: Handler = async (event, context) => {
             LEFT JOIN users s ON c.supervisor_id = s.id
             LEFT JOIN users u ON u.cell_id = c.id AND u.status = 'ACTIVE'
             INNER JOIN cell_leaders cl ON c.id = cl.cell_id
-            WHERE cl.user_id = ?
+            WHERE cl.user_id = $1
             GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
             ORDER BY c.name
           `, [userId]);
@@ -134,7 +134,7 @@ export const handler: Handler = async (event, context) => {
             LEFT JOIN users s ON c.supervisor_id = s.id
             LEFT JOIN users u ON u.cell_id = c.id AND u.status = 'ACTIVE'
             INNER JOIN users me ON me.cell_id = c.id
-            WHERE me.id = ?
+            WHERE me.id = $1
             GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
           `, [userId]);
           cells = memberCellResult.rows;
@@ -191,7 +191,7 @@ export const handler: Handler = async (event, context) => {
                c.name as cell_name
         FROM users u
         LEFT JOIN cells c ON u.cell_id = c.id
-        WHERE u.id = ?
+        WHERE u.id = $1
       `, [userId]);
 
       if (result.rows.length === 0) {
