@@ -3,19 +3,18 @@
 # =============================================================================
 
 [build]
-  # O comando agora é uma sequência que instala as dependências em cada pasta específica.
-  # Passo 1: Entra na pasta de funções e instala suas dependências.
-  # Passo 2: Entra na pasta do cliente, instala suas dependências e faz o build.
+  # O comando agora instala as dependências em cada pasta específica,
+  # garantindo que as devDependencies do client sejam incluídas.
   command = "(cd netlify/functions && npm install) && (cd client && npm install && npm run build)"
 
-  # Diretório de publicação do frontend.
   publish = "client/.next"
-
-  # Diretório das funções serverless.
   functions = "netlify/functions"
 
 [build.environment]
-  NODE_VERSION = "20.11.1" # Usando uma versão LTS estável.
+  # Define a versão do Node.js compatível com suas dependências.
+  NODE_VERSION = "22.12.0" 
+  # Esta flag força o npm a instalar TODAS as dependências, incluindo as de desenvolvimento.
+  NPM_FLAGS = "--include=dev"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
