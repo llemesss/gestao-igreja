@@ -1,39 +1,20 @@
+# Comando para TRAE: Sobrescrever o arquivo 'netlify.toml' com este conteúdo.
+
 [build]
-  base = "client"
-  publish = ".next"
-  command = "npm run build"
+  # Comando de build agora é executado a partir da raiz do projeto.
+  command = "cd client && npm install && npm run build"
+  # Caminho de publicação corrigido para ser relativo à raiz.
+  publish = "client/.next"
+  # Caminho das funções corrigido para ser relativo à raiz.
+  functions = "netlify/functions"
 
-[build.environment]
-  NODE_VERSION = "18"
-
-# Configurações para Next.js no Netlify
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-[functions]
-  directory = "netlify/functions"
-  node_bundler = "esbuild"
-
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
-
-# Configurações para SPA (Single Page Application)
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Frame-Options = "DENY"
-    X-XSS-Protection = "1; mode=block"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
-
-# Configurações CORS para Netlify Functions
+# Headers de CORS globais para todas as funções.
 [[headers]]
   for = "/.netlify/functions/*"
   [headers.values]
     Access-Control-Allow-Origin = "*"
-    Access-Control-Allow-Headers = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
-    Access-Control-Allow-Methods = "GET, POST, PUT, DELETE, OPTIONS"
-    Access-Control-Allow-Credentials = "true"
+    Access-Control-Allow-Methods = "POST, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"

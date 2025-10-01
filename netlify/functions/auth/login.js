@@ -5,28 +5,17 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 exports.handler = async function(event) {
-  // --- Bloco de Configuração de CORS ---
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept, Origin',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Credentials': 'true',
-    'Content-Type': 'application/json'
-  };
-
   // Resposta para a requisição "preflight" do navegador
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 204, // No Content
-      headers,
       body: '',
     };
   }
-  // --- Fim do Bloco de CORS ---
 
   // Validação do método
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
 
   const client = new Client({ 
@@ -40,7 +29,7 @@ exports.handler = async function(event) {
     const { email, password } = JSON.parse(event.body);
 
     if (!email || !password) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Email e senha são obrigatórios' }) };
+      return { statusCode: 400, body: JSON.stringify({ error: 'Email e senha são obrigatórios' }) };
     }
     
     await client.connect();
@@ -49,7 +38,7 @@ exports.handler = async function(event) {
     const user = result.rows[0];
 
     if (!user || !bcrypt.compareSync(password, user.password)) {
-      return { statusCode: 401, headers, body: JSON.stringify({ error: 'Credenciais inválidas' }) };
+      return { statusCode: 401, body: JSON.stringify({ error: 'Credenciais inválidas' }) };
     }
 
     const token = jwt.sign(
@@ -60,7 +49,6 @@ exports.handler = async function(event) {
     
     return {
       statusCode: 200,
-      headers,
       body: JSON.stringify({ 
         token,
         user: {
@@ -76,7 +64,6 @@ exports.handler = async function(event) {
     console.error('Login Error:', error);
     return {
       statusCode: 500,
-      headers,
       body: JSON.stringify({ error: 'Ocorreu um erro interno.' }),
     };
   } finally {

@@ -6,28 +6,17 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 
 exports.handler = async function(event) {
-  // --- Bloco de Configuração de CORS ---
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept, Origin',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Credentials': 'true',
-    'Content-Type': 'application/json'
-  };
-
   // Resposta para a requisição "preflight" do navegador
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 204, // No Content
-      headers,
       body: '',
     };
   }
-  // --- Fim do Bloco de CORS ---
 
   // Validação do método
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
   
   try {
@@ -38,7 +27,6 @@ exports.handler = async function(event) {
     if (!name || !email || !password || !confirmPassword) {
       return {
         statusCode: 400,
-        headers,
         body: JSON.stringify({ error: 'Nome, email, senha e confirmação de senha são obrigatórios' }),
       };
     }
@@ -47,7 +35,6 @@ exports.handler = async function(event) {
     if (password !== confirmPassword) {
       return {
         statusCode: 400,
-        headers,
         body: JSON.stringify({ error: 'As senhas não coincidem' }),
       };
     }
@@ -57,7 +44,6 @@ exports.handler = async function(event) {
     if (!emailRegex.test(email)) {
       return {
         statusCode: 400,
-        headers,
         body: JSON.stringify({ error: 'Formato de email inválido' }),
       };
     }
@@ -66,7 +52,6 @@ exports.handler = async function(event) {
     if (password.length < 6) {
       return {
         statusCode: 400,
-        headers,
         body: JSON.stringify({ error: 'A senha deve ter pelo menos 6 caracteres' }),
       };
     }
@@ -87,7 +72,6 @@ exports.handler = async function(event) {
     if (existingUser.rows.length > 0) {
       return {
         statusCode: 409, // Conflict
-        headers,
         body: JSON.stringify({ error: 'Este email já está cadastrado' }),
       };
     }
@@ -131,7 +115,6 @@ exports.handler = async function(event) {
     // Retornar sucesso com o token e dados do usuário
     return {
       statusCode: 201, // Created
-      headers,
       body: JSON.stringify({ 
         message: 'Usuário criado com sucesso',
         token,
@@ -152,14 +135,12 @@ exports.handler = async function(event) {
     if (error.code === '23505') {
       return {
         statusCode: 409,
-        headers,
         body: JSON.stringify({ error: 'Este email já está cadastrado' }),
       };
     }
 
     return {
       statusCode: 500,
-      headers,
       body: JSON.stringify({ error: 'Erro interno do servidor' }),
     };
   } finally {
