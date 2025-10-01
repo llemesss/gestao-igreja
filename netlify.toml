@@ -3,27 +3,19 @@
 # =============================================================================
 
 [build]
-  # O comando é executado a partir da RAIZ do projeto.
-  command = "npm install && (cd client && npm install && npm run build)"
-  
-  # Diretório contendo o resultado do build do Next.js, relativo à raiz.
+  # O comando agora é uma sequência que instala as dependências em cada pasta específica.
+  # Passo 1: Entra na pasta de funções e instala suas dependências.
+  # Passo 2: Entra na pasta do cliente, instala suas dependências e faz o build.
+  command = "(cd netlify/functions && npm install) && (cd client && npm install && npm run build)"
+
+  # Diretório de publicação do frontend.
   publish = "client/.next"
-  
-  # Diretório contendo as funções serverless, relativo à raiz.
+
+  # Diretório das funções serverless.
   functions = "netlify/functions"
 
-# Define a versão do Node.js para todo o ambiente de build.
 [build.environment]
-  NODE_VERSION = "20.11.1" # Usando uma versão LTS (Long-Term Support) estável.
+  NODE_VERSION = "20.11.1" # Usando uma versão LTS estável.
 
-# Plugin essencial para otimizar o deploy de sites Next.js na Netlify.
 [[plugins]]
   package = "@netlify/plugin-nextjs"
-
-# Regras de cabeçalhos (Headers) para a API.
-[[headers]]
-  for = "/.netlify/functions/*"
-  [headers.values]
-    Access-Control-Allow-Origin = "*"
-    Access-Control-Allow-Methods = "POST, GET, PUT, DELETE, OPTIONS"
-    Access-Control-Allow-Headers = "Content-Type, Authorization"
