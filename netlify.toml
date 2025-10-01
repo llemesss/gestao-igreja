@@ -1,19 +1,21 @@
-# Arquivo: netlify.toml (CORRIGIDO)
+# Arquivo: netlify.toml (VERSÃO CORRIGIDA E FINAL)
 
 [build]
-  # O 'base' já nos coloca no diretório 'client', então o comando
-  # não precisa mais do 'cd client'.
-  base = "client"
-  command = "npm install && npm run build"
-  # O diretório de publicação é relativo ao 'base'.
-  publish = ".next"
-  # As funções são relativas à raiz do repositório.
+  # 1. O comando é executado a partir da raiz do projeto.
+  # 2. Primeiro, ele instala as dependências das funções (do netlify/functions/package.json).
+  # 3. Depois, ele entra na pasta 'client', instala as dependências do frontend E as devDependencies, e faz o build.
+  command = "npm install && (cd client && npm install && npm run build)"
+  
+  # O caminho de publicação é relativo à raiz.
+  publish = "client/.next"
+  
+  # O caminho das funções é relativo à raiz.
   functions = "netlify/functions"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-# Headers de CORS globais para todas as funções.
+# Headers de CORS para as funções.
 [[headers]]
   for = "/.netlify/functions/*"
   [headers.values]
