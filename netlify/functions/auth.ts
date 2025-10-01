@@ -44,7 +44,7 @@ export const handler: Handler = async (event, context) => {
 
       // Buscar usuário
       const result = await pool.query(
-        'SELECT id, name, email, password_hash, role, status FROM users WHERE email = ?',
+        'SELECT id, name, email, password_hash, role, status FROM users WHERE email = $1',
         [email]
       );
 
@@ -112,7 +112,7 @@ export const handler: Handler = async (event, context) => {
 
       // Verificar se usuário já existe
       const existingUser = await pool.query(
-        'SELECT id FROM users WHERE email = ?',
+        'SELECT id FROM users WHERE email = $1',
         [email]
       );
 
@@ -131,7 +131,7 @@ export const handler: Handler = async (event, context) => {
       // Criar usuário
       await pool.query(
         `INSERT INTO users (id, name, email, password_hash, role, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'MEMBRO', 'ACTIVE', datetime('now'), datetime('now'))`,
+         VALUES ($1, $2, $3, $4, 'MEMBRO', 'ACTIVE', NOW(), NOW())`,
         [userId, name, email, passwordHash]
       );
 
