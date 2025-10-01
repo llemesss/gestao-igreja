@@ -1,11 +1,13 @@
-# Comando para TRAE: Sobrescrever o arquivo 'netlify.toml' com este conteúdo.
+# Arquivo: netlify.toml (CORRIGIDO)
 
 [build]
-  # Comando de build agora é executado a partir da raiz do projeto.
-  command = "cd client && npm install && npm run build"
-  # Caminho de publicação corrigido para ser relativo à raiz.
-  publish = "client/.next"
-  # Caminho das funções corrigido para ser relativo à raiz.
+  # O 'base' já nos coloca no diretório 'client', então o comando
+  # não precisa mais do 'cd client'.
+  base = "client"
+  command = "npm install && npm run build"
+  # O diretório de publicação é relativo ao 'base'.
+  publish = ".next"
+  # As funções são relativas à raiz do repositório.
   functions = "netlify/functions"
 
 [[plugins]]
