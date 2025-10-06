@@ -4,8 +4,22 @@ import Cookies from 'js-cookie';
 import { AuthResponse, LoginCredentials, RegisterData } from '@/types';
 import { auth } from './auth';
 
-// Base da API: usa NEXT_PUBLIC_API_URL ou fallback para dev local
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+// Base da API: normaliza o sufixo /api e evita variações como /API
+function normalizeApiBase(url?: string) {
+  if (!url) return 'http://localhost:5000/api';
+  let u = url.trim();
+  // Remove barras no final
+  u = u.replace(/\/+$/, '');
+  // Garante sufixo /api em minúsculas
+  if (/\/api$/i.test(u)) {
+    u = u.replace(/\/api$/i, '/api');
+  } else {
+    u = `${u}/api`;
+  }
+  return u;
+}
+
+const API_URL = normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);
 
 // Criar instância do axios
 const apiClient = axios.create({
