@@ -42,9 +42,9 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
-      // Buscar usuário (schema Neon: coluna 'password')
+      // Buscar usuário (Neon: coluna 'password_hash')
       const result = await pool.query(
-        'SELECT id, name, email, password, role FROM users WHERE email = $1',
+        'SELECT id, name, email, password_hash, role FROM users WHERE email = $1',
         [email]
       );
 
@@ -59,7 +59,7 @@ export const handler: Handler = async (event, context) => {
       const user = result.rows[0];
 
       // Verificar senha
-      const isValidPassword = await bcrypt.compare(password, user.password);
+      const isValidPassword = await bcrypt.compare(password, user.password_hash);
       if (!isValidPassword) {
         return {
           statusCode: 401,
@@ -120,10 +120,10 @@ export const handler: Handler = async (event, context) => {
       const passwordHash = await bcrypt.hash(password, 10);
       const userId = uuidv4();
 
-      // Criar usuário (schema Neon: coluna 'password'; sem status/updated_at)
+      // Criar usuário (Neon: coluna 'password_hash')
       await pool.query(
-        `INSERT INTO users (id, name, email, password, role, created_at)
-         VALUES ($1, $2, $3, $4, 'member', NOW())`,
+        `INSERT INTO users (id, name, email, password_hash, role, created_at)
+         VALUES ($1, $2, $3, $4, 'MEMBRO', NOW())`,
         [userId, name, email, passwordHash]
       );
 
@@ -143,7 +143,7 @@ export const handler: Handler = async (event, context) => {
             id: userId,
             name,
             email,
-            role: 'member'
+            role: 'MEMBRO'
           }
         })
       };
