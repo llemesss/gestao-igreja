@@ -1,6 +1,9 @@
 import Cookies from 'js-cookie';
 import { User } from '@/types';
 
+// Base da API: usa NEXT_PUBLIC_API_URL ou fallback para dev local
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+
 const TOKEN_KEY = 'auth-token';
 const USER_KEY = 'user-data';
 
@@ -67,7 +70,7 @@ export const auth = {
       const token = auth.getToken();
       if (!token) return null;
 
-      const response = await fetch('/api/me', {
+      const response = await fetch(`${API_URL}/me`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
