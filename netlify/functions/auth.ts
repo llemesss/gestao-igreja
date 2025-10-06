@@ -32,121 +32,147 @@ export const handler: Handler = async (event, context) => {
 
     // Login
     if (path === '/login' && method === 'POST') {
-      const { email, password } = JSON.parse(event.body || '{}');
+      try {
+        const { email, password } = JSON.parse(event.body || '{}');
 
-      if (!email || !password) {
+        if (!email || !password) {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({ error: 'Email e senha são obrigatórios' })
+          };
+        }
+
+        // Buscar usuário (Neon: coluna 'password_hash')
+        const result = await pool.query(
+          'SELECT id, name, email, password_hash, role FROM users WHERE email = $1',
+          [email]
+        );
+
+        if (result.rows.length === 0) {
+          return {
+            statusCode: 401,
+            headers,
+            body: JSON.stringify({ error: 'Credenciais inválidas' })
+          };
+        }
+
+        const user = result.rows[0];
+
+        // Verificar senha
+        const isValidPassword = await bcrypt.compare(password, user.password_hash);
+        if (!isValidPassword) {
+          return {
+            statusCode: 401,
+            headers,
+            body: JSON.stringify({ error: 'Credenciais inválidas' })
+          };
+        }
+
+        // Gerar token
+        const token = jwt.sign(
+          { userId: user.id, email: user.email, role: user.role },
+          JWT_SECRET,
+          { expiresIn: JWT_EXPIRES_IN }
+        );
+
         return {
-          statusCode: 400,
+          statusCode: 200,
           headers,
-          body: JSON.stringify({ error: 'Email e senha são obrigatórios' })
+          body: JSON.stringify({
+            token,
+            user: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              role: user.role
+            }
+          })
+        };
+      } catch (err) {
+        console.error('Erro em /auth/login:', err);
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({ error: 'Erro interno ao efetuar login' })
         };
       }
-
-      // Buscar usuário (Neon: coluna 'password_hash')
-      const result = await pool.query(
-        'SELECT id, name, email, password_hash, role FROM users WHERE email = $1',
-        [email]
-      );
-
-      if (result.rows.length === 0) {
-        return {
-          statusCode: 401,
-          headers,
-          body: JSON.stringify({ error: 'Credenciais inválidas' })
-        };
-      }
-
-      const user = result.rows[0];
-
-      // Verificar senha
-      const isValidPassword = await bcrypt.compare(password, user.password_hash);
-      if (!isValidPassword) {
-        return {
-          statusCode: 401,
-          headers,
-          body: JSON.stringify({ error: 'Credenciais inválidas' })
-        };
-      }
-
-      // Gerar token
-      const token = jwt.sign(
-        { userId: user.id, email: user.email, role: user.role },
-        JWT_SECRET,
-        { expiresIn: JWT_EXPIRES_IN }
-      );
-
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          token,
-          user: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role
-          }
-        })
-      };
     }
 
     // Register
     if (path === '/register' && method === 'POST') {
-      const { name, email, password } = JSON.parse(event.body || '{}');
+      try {
+        const { name, email, password } = JSON.parse(event.body || '{}');
 
-      if (!name || !email || !password) {
+        if (!name || !email || !password) {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({ error: 'Nome, email e senha são obrigatórios' })
+          };
+        }
+
+        // Verificar se usuário já existe
+        const existingUser = await pool.query(
+          'SELECT id FROM users WHERE email = $1',
+          [email]
+        );
+
+        if (existingUser.rows.length > 0) {
+          return {
+            statusCode: 409,
+            headers,
+            body: JSON.stringify({ error: 'Email já está em uso' })
+          };
+        }
+
+        // Hash da senha
+        const passwordHash = await bcrypt.hash(password, 10);
+        const userId = uuidv4();
+
+        // Criar usuário (Neon: coluna 'password_hash')
+        await pool.query(
+          `INSERT INTO users (id, name, email, password_hash, role, created_at)
+           VALUES ($1, $2, $3, $4, 'MEMBRO', NOW())`,
+          [userId, name, email, passwordHash]
+        );
+
+        // Gerar token
+        const token = jwt.sign(
+          { userId, email, role: 'MEMBRO' },
+          JWT_SECRET,
+          { expiresIn: JWT_EXPIRES_IN }
+        );
+
         return {
-          statusCode: 400,
+          statusCode: 201,
           headers,
-          body: JSON.stringify({ error: 'Nome, email e senha são obrigatórios' })
+          body: JSON.stringify({
+            token,
+            user: {
+              id: userId,
+              name,
+              email,
+              role: 'MEMBRO'
+            }
+          })
+        };
+      } catch (err: any) {
+        console.error('Erro em /auth/register:', err);
+        if (err?.code === '23505') {
+          // violação de chave única no Postgres
+          return {
+            statusCode: 409,
+            headers,
+            body: JSON.stringify({ error: 'Email já está em uso' })
+          };
+        }
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({ error: 'Erro interno ao registrar usuário' })
         };
       }
-
-      // Verificar se usuário já existe
-      const existingUser = await pool.query(
-        'SELECT id FROM users WHERE email = $1',
-        [email]
-      );
-
-      if (existingUser.rows.length > 0) {
-        return {
-          statusCode: 400,
-          headers,
-          body: JSON.stringify({ error: 'Email já está em uso' })
-        };
-      }
-
-      // Hash da senha
-      const passwordHash = await bcrypt.hash(password, 10);
-      const userId = uuidv4();
-
-      // Criar usuário (Neon: coluna 'password_hash')
-      await pool.query(
-        `INSERT INTO users (id, name, email, password_hash, role, created_at)
-         VALUES ($1, $2, $3, $4, 'MEMBRO', NOW())`,
-        [userId, name, email, passwordHash]
-      );
-
-      // Gerar token
-      const token = jwt.sign(
-        { userId, email, role: 'MEMBRO' },
-        JWT_SECRET,
-        { expiresIn: JWT_EXPIRES_IN }
-      );
-
-      return {
-        statusCode: 201,
-        headers,
-        body: JSON.stringify({
-          token,
-          user: {
-            id: userId,
-            name,
-            email,
-            role: 'MEMBRO'
-          }
-        })
-      };
     }
 
     return {
