@@ -10,217 +10,86 @@ interface AuthUser {
   role: string;
 }
 
-// Middleware de autenticação adaptado
+// Autenticação via JWT
 const verifyToken = (authHeader?: string): AuthUser | null => {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
   const token = authHeader.substring(7);
-  
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-    return {
-      userId: decoded.userId,
-      email: decoded.email,
-      role: decoded.role
-    };
-  } catch (error) {
+    return { userId: decoded.userId, email: decoded.email, role: decoded.role };
+  } catch {
     return null;
   }
 };
 
-const requireAdmin = (user: AuthUser): boolean => {
-  return ['ADMIN', 'PASTOR', 'COORDENADOR'].includes(user.role);
-};
-
-export const handler: Handler = async (event, context) => {
-  // Configurar CORS
+export const handler: Handler = async (event) => {
   const headers = {
-    'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || 'http://localhost:3000',
+    'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Credentials': 'true',
     'Content-Type': 'application/json'
   };
 
-  // Handle preflight requests
   if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers,
-      body: ''
-    };
+    return { statusCode: 200, headers, body: '' };
   }
 
-  // Verificar autenticação
-  const user = verifyToken(event.headers.authorization);
-  if (!user) {
-    return {
-      statusCode: 401,
-      headers,
-      body: JSON.stringify({ error: 'Token inválido ou ausente' })
-    };
+  const requester = verifyToken(event.headers.authorization);
+  if (!requester) {
+    return { statusCode: 401, headers, body: JSON.stringify({ message: 'Token inválido ou ausente' }) };
   }
 
   try {
     const path = event.path.replace('/.netlify/functions/users', '');
     const method = event.httpMethod;
 
-    // GET /my-cells -> Obter células do usuário logado
-    if (path === '/my-cells' && method === 'GET') {
-      const { userId, role } = user;
-      
-      let cells = [];
-      
-      switch (role) {
-        case 'ADMIN':
-        case 'PASTOR':
-        case 'COORDENADOR':
-          // Ver todas as células
-          const allCellsResult = await pool.query(`
-            SELECT c.id, c.name, c.supervisor_id, c.created_at, c.updated_at,
-                   s.name as supervisor_name,
-                   COUNT(DISTINCT u.id) as member_count
-            FROM cells c
-            LEFT JOIN users s ON c.supervisor_id = s.id
-            LEFT JOIN users u ON u.cell_id = c.id AND u.status = 'ACTIVE'
-            GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
-            ORDER BY c.name
-          `);
-          cells = allCellsResult.rows;
-          break;
-          
-        case 'SUPERVISOR':
-          // Ver células supervisionadas
-          const supervisedCellsResult = await pool.query(`
-            SELECT c.id, c.name, c.supervisor_id, c.created_at, c.updated_at,
-                   s.name as supervisor_name,
-                   COUNT(DISTINCT u.id) as member_count
-            FROM cells c
-            LEFT JOIN users s ON c.supervisor_id = s.id
-            LEFT JOIN users u ON u.cell_id = c.id AND u.status = 'ACTIVE'
-            WHERE c.supervisor_id = $1
-            GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
-            ORDER BY c.name
-          `, [userId]);
-          cells = supervisedCellsResult.rows;
-          break;
-          
-        case 'LIDER':
-          // Ver células que lidera
-          const ledCellsResult = await pool.query(`
-            SELECT c.id, c.name, c.supervisor_id, c.created_at, c.updated_at,
-                   s.name as supervisor_name,
-                   COUNT(DISTINCT u.id) as member_count
-            FROM cells c
-            LEFT JOIN users s ON c.supervisor_id = s.id
-            LEFT JOIN users u ON u.cell_id = c.id AND u.status = 'ACTIVE'
-            INNER JOIN cell_leaders cl ON c.id = cl.cell_id
-            WHERE cl.user_id = $1
-            GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
-            ORDER BY c.name
-          `, [userId]);
-          cells = ledCellsResult.rows;
-          break;
-          
-        case 'MEMBRO':
-          // Ver apenas sua própria célula
-          const memberCellResult = await pool.query(`
-            SELECT c.id, c.name, c.supervisor_id, c.created_at, c.updated_at,
-                   s.name as supervisor_name,
-                   COUNT(DISTINCT u.id) as member_count
-            FROM cells c
-            LEFT JOIN users s ON c.supervisor_id = s.id
-            LEFT JOIN users u ON u.cell_id = c.id AND u.status = 'ACTIVE'
-            INNER JOIN users me ON me.cell_id = c.id
-            WHERE me.id = $1
-            GROUP BY c.id, c.name, c.supervisor_id, c.created_at, c.updated_at, s.name
-          `, [userId]);
-          cells = memberCellResult.rows;
-          break;
-          
-        default:
-          cells = [];
+    // ROTA ÚNICA: GET /:id -> Perfil do usuário + estatísticas de oração
+    if (method === 'GET' && /^\/[a-f0-9-]+$/.test(path)) {
+      const targetUserId = path.slice(1);
+
+      // Perfil (apenas usuários ativos)
+      const userQuery = `
+        SELECT id, name, email, phone, role, cell_id, status
+        FROM users
+        WHERE id = $1 AND status = 'ACTIVE'
+      `;
+      const userResult = await pool.query(userQuery, [targetUserId]);
+      if (userResult.rows.length === 0) {
+        return { statusCode: 404, headers, body: JSON.stringify({ message: 'Usuário não encontrado' }) };
       }
-      
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify(cells)
+      const userProfile = userResult.rows[0];
+
+      // Estatísticas de oração
+      const [countResult, lastResult] = await Promise.all([
+        pool.query(
+          'SELECT COUNT(*)::int AS total_prayers FROM daily_prayer_log WHERE user_id = $1',
+          [targetUserId]
+        ),
+        pool.query(
+          'SELECT MAX(prayer_date) AS last_prayer_date FROM daily_prayer_log WHERE user_id = $1',
+          [targetUserId]
+        )
+      ]);
+
+      const totalPrayers = countResult.rows[0]?.total_prayers ?? 0;
+      const lastPrayerDate = lastResult.rows[0]?.last_prayer_date ?? null;
+
+      const responseData = {
+        profile: userProfile,
+        stats: {
+          totalPrayers,
+          lastPrayerDate
+        }
       };
+
+      return { statusCode: 200, headers, body: JSON.stringify(responseData) };
     }
 
-    // GET / -> Listar todos os usuários (Admin)
-    if (path === '' && method === 'GET') {
-      if (!requireAdmin(user)) {
-        return {
-          statusCode: 403,
-          headers,
-          body: JSON.stringify({ error: 'Acesso negado' })
-        };
-      }
-
-      const result = await pool.query(`
-        SELECT u.id, u.name, u.email, u.role, u.status, u.cell_id, u.created_at,
-               c.name as cell_name
-        FROM users u
-        LEFT JOIN cells c ON u.cell_id = c.id
-        ORDER BY u.name
-      `);
-
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify(result.rows)
-      };
-    }
-
-    // GET /:id -> Obter usuário específico
-    if (path.match(/^\/[a-f0-9-]+$/) && method === 'GET') {
-      const userId = path.substring(1);
-      
-      const result = await pool.query(`
-        SELECT u.id, u.name, u.email, u.role, u.status, u.cell_id, u.created_at,
-               u.full_name, u.phone, u.whatsapp, u.gender, u.birth_city, u.birth_state,
-               u.birth_date, u.age_group, u.address, u.address_number, u.neighborhood,
-               u.zip_code, u.address_reference, u.father_name, u.mother_name,
-               u.marital_status, u.spouse_name, u.education_level, u.education_course,
-               u.profession, u.conversion_date, u.previous_church, u.transfer_info,
-               u.has_children, u.oikos1, u.oikos2,
-               c.name as cell_name
-        FROM users u
-        LEFT JOIN cells c ON u.cell_id = c.id
-        WHERE u.id = $1
-      `, [userId]);
-
-      if (result.rows.length === 0) {
-        return {
-          statusCode: 404,
-          headers,
-          body: JSON.stringify({ error: 'Usuário não encontrado' })
-        };
-      }
-
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify(result.rows[0])
-      };
-    }
-
-    return {
-      statusCode: 404,
-      headers,
-      body: JSON.stringify({ error: 'Rota não encontrada' })
-    };
-
+    // Qualquer outra rota resulta em 404
+    return { statusCode: 404, headers, body: JSON.stringify({ message: 'Rota não encontrada' }) };
   } catch (error) {
-    console.error('Erro na função users:', error);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Erro interno do servidor' })
-    };
+    console.error(`Erro fatal em users:`, error);
+    return { statusCode: 500, headers, body: JSON.stringify({ message: 'Erro interno no servidor' }) };
   }
 };
