@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input, Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
 import { api, apiMethods } from '@/lib/api';
+import { toast } from 'sonner';
 import { auth } from '@/lib/auth';
 
 function LoginForm() {
@@ -62,23 +63,32 @@ function LoginForm() {
       
       // O servidor retorna diretamente os dados, não em um wrapper success/data
       if (response.token && response.user) {
+        toast.success('Login realizado com sucesso!');
         auth.setAuth(response.token, response.user);
         router.push('/dashboard');
       } else {
-        setErrors({ general: response.message || 'Erro ao fazer login' });
+        const msg = response.message || 'Erro ao fazer login';
+        setErrors({ general: msg });
+        toast.error(msg);
       }
     } catch (error: unknown) {
       console.error('Erro de login:', error);
       if (error instanceof Error && 'response' in error) {
         // Erro da API
         const apiError = error as { response?: { data?: { error?: string } } };
-        setErrors({ general: apiError.response?.data?.error || 'Erro no servidor' });
+        const msg = apiError.response?.data?.error || 'Erro no servidor';
+        setErrors({ general: msg });
+        toast.error(msg);
       } else if (error instanceof Error && 'request' in error) {
         // Erro de rede/conexão
-        setErrors({ general: 'Erro de conexão. Verifique se o servidor está rodando.' });
+        const msg = 'Erro de conexão. Verifique se o servidor está rodando.';
+        setErrors({ general: msg });
+        toast.error(msg);
       } else {
         // Outro tipo de erro
-        setErrors({ general: 'Erro inesperado. Tente novamente.' });
+        const msg = 'Erro inesperado. Tente novamente.';
+        setErrors({ general: msg });
+        toast.error(msg);
       }
     } finally {
       setLoading(false);
