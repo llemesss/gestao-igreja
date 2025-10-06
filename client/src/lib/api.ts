@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { toast } from '@/components/ui/toast';
 import Cookies from 'js-cookie';
 import { AuthResponse, LoginCredentials, RegisterData } from '@/types';
 import { auth } from './auth';
@@ -38,6 +39,9 @@ apiClient.interceptors.response.use(
       Cookies.remove('user-data');
       window.location.href = '/login';
     }
+    // Exibir toast amigável para outros erros
+    const message = error.response?.data?.error || error.response?.data?.message || 'Ocorreu um erro ao comunicar com a API.';
+    toast.error(message);
     return Promise.reject(error);
   }
 );
@@ -158,7 +162,7 @@ const cellsApi = {
   },
 
   getMyCellMembers: async () => {
-    const response = await apiClient.get('/cells/my-cell-members');
+    const response = await apiClient.get('/cells/my-cell/members');
     return response.data;
   },
 
@@ -196,14 +200,19 @@ const prayersApi = {
   },
 
   registerPrayer: async () => {
-    const response = await fetch('/api/prayers', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${auth.getToken()}`
-      }
-    });
-    return response.json();
+    try {
+      const response = await fetch('/api/prayers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${auth.getToken()}`
+        }
+      });
+      return await response.json();
+    } catch (error) {
+      toast.error('Falha ao registrar oração. Tente novamente.');
+      throw error;
+    }
   }
 };
 
