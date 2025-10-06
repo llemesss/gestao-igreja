@@ -2,12 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { auth } from '@/lib/auth';
 import { X } from 'lucide-react';
 
-// Configuração da API
-const API_URL = process.env.NEXT_PUBLIC_API_URL || (
-  process.env.NODE_ENV === 'production' 
-    ? '/.netlify/functions' 
-    : 'http://localhost:5000/api'
-);
+// Base da API: usa NEXT_PUBLIC_API_URL ou fallback para dev local
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 interface PrayerStatsData {
   stats?: {
