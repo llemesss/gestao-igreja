@@ -26,7 +26,14 @@ Use Supabase Project → Settings → Database to obtain the `DATABASE_URL`. Mak
 
 ## Frontend (Next.js)
 
-Set `NEXT_PUBLIC_API_URL` pointing to your Render service base. For local dev, you can keep `http://localhost:5000/api`.
+Deploy the Next.js frontend on Render as a Web Service.
+
+- Root directory: `client`
+- Build command: `npm install && npm run build`
+- Start command: `npm start`
+- Environment: Node 18+
+
+Set `NEXT_PUBLIC_API_URL` pointing to your Render backend base. For local dev, you can keep `http://localhost:5000/api`.
 
 Example `.env.local` in `client/`:
 
@@ -41,3 +48,7 @@ The client automatically uses this base URL via `src/lib/api.ts`.
 - Authentication uses JWT signed by the backend. Tokens are saved and sent via the client axios instance.
 - CORS is enabled with `CORS_ORIGIN`. Adjust as needed.
 - If you plan to migrate to Supabase Auth later, we can adapt the server to verify Supabase JWTs and move registration to Supabase.
+
+## Optional: render.yaml
+
+You can commit the provided `render.yaml` at the repository root to define both services (frontend and backend) for one-click deploy on Render. Set environment variables in Render dashboard for the keys marked with `sync: false`.
