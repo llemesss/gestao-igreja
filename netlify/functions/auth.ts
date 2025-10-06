@@ -10,7 +10,7 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 export const handler: Handler = async (event, context) => {
   // Configurar CORS
   const headers = {
-    'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || 'http://localhost:3000',
+    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Credentials': 'true',
@@ -42,9 +42,9 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
-      // Buscar usuário
+      // Buscar usuário (schema Neon: coluna 'password')
       const result = await pool.query(
-        'SELECT id, name, email, password_hash, role, status FROM users WHERE email = $1',
+        'SELECT id, name, email, password, role FROM users WHERE email = $1',
         [email]
       );
 
@@ -58,16 +58,8 @@ export const handler: Handler = async (event, context) => {
 
       const user = result.rows[0];
 
-      if (user.status !== 'ACTIVE') {
-        return {
-          statusCode: 401,
-          headers,
-          body: JSON.stringify({ error: 'Usuário inativo' })
-        };
-      }
-
       // Verificar senha
-      const isValidPassword = await bcrypt.compare(password, user.password_hash);
+      const isValidPassword = await bcrypt.compare(password, user.password);
       if (!isValidPassword) {
         return {
           statusCode: 401,
@@ -128,10 +120,10 @@ export const handler: Handler = async (event, context) => {
       const passwordHash = await bcrypt.hash(password, 10);
       const userId = uuidv4();
 
-      // Criar usuário
+      // Criar usuário (schema Neon: coluna 'password'; sem status/updated_at)
       await pool.query(
-        `INSERT INTO users (id, name, email, password_hash, role, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 'MEMBRO', 'ACTIVE', NOW(), NOW())`,
+        `INSERT INTO users (id, name, email, password, role, created_at)
+         VALUES ($1, $2, $3, $4, 'member', NOW())`,
         [userId, name, email, passwordHash]
       );
 
@@ -151,7 +143,7 @@ export const handler: Handler = async (event, context) => {
             id: userId,
             name,
             email,
-            role: 'MEMBRO'
+            role: 'member'
           }
         })
       };
