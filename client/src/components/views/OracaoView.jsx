@@ -18,10 +18,11 @@ export function OracaoView() {
   useEffect(() => {
     async function fetchMembros() {
       try {
-        const response = await api.get('/cells/members-with-oikos');
-        setMembros(response.data);
+        const data = await apiMethods.cells.getMyCellMembers();
+        setMembros(data);
       } catch (error) {
         console.error("Erro ao buscar membros da célula:", error);
+        toast.error('Falha ao buscar membros da sua célula.');
       } finally {
         setIsLoading(false);
       }
@@ -40,7 +41,7 @@ export function OracaoView() {
     const toastId = toast.loading('Registrando sua oração...');
     
     try {
-      await api.post('/prayers/log-daily');
+      await apiMethods.prayers.register();
       toast.success('Oração de hoje registrada com sucesso!', { id: toastId });
       // Atualizar o estado global para refletir que o usuário orou hoje
       setHasPrayedToday(true);
