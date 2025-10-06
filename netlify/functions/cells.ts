@@ -33,7 +33,7 @@ const verifyToken = (authHeader?: string): AuthUser | null => {
 export const handler: Handler = async (event, context) => {
   // Configurar CORS
   const headers = {
-    'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || 'http://localhost:3000',
+    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Credentials': 'true',
@@ -179,18 +179,79 @@ export const handler: Handler = async (event, context) => {
       };
     }
 
-    // GET /:id/members -> Obter membros da célula
+    // GET /my-cell/members -> Obter membros da própria célula do usuário
+    if (path === '/my-cell/members' && method === 'GET') {
+      const { userId } = user;
+      // Buscar a célula do usuário autenticado
+      const userCellRes = await pool.query(
+        'SELECT cell_id FROM users WHERE id = $1',
+        [userId]
+      );
+
+      if (userCellRes.rows.length === 0 || !userCellRes.rows[0].cell_id) {
+        return {
+          statusCode: 404,
+          headers,
+          body: JSON.stringify({ error: 'Célula do usuário não encontrada' })
+        };
+      }
+
+      const cellId = userCellRes.rows[0].cell_id;
+
+      const result = await pool.query(
+        `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+                u.birth_date, u.age_group, u.gender, u.marital_status,
+                u.oikos1, u.oikos2, u.created_at
+         FROM users u
+         WHERE u.cell_id = $1
+         ORDER BY u.name ASC`,
+        [cellId]
+      );
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify(result.rows)
+      };
+    }
+
+    // GET /:id/members -> Obter membros da célula especificada, apenas se for a célula do usuário
     if (path.match(/^\/[a-f0-9-]+\/members$/) && method === 'GET') {
-      const cellId = path.split('/')[1];
-      
-      const result = await pool.query(`
-        SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
-               u.birth_date, u.age_group, u.gender, u.marital_status,
-               u.oikos1, u.oikos2, u.created_at
-        FROM users u
-        WHERE u.cell_id = $1 AND u.status = 'ACTIVE'
-        ORDER BY u.name ASC
-      `, [cellId]);
+      const requestedCellId = path.split('/')[1];
+      const { userId } = user;
+
+      // Verificar a célula do usuário autenticado
+      const userCellRes = await pool.query(
+        'SELECT cell_id FROM users WHERE id = $1',
+        [userId]
+      );
+
+      const userCellId = userCellRes.rows[0]?.cell_id;
+      if (!userCellId) {
+        return {
+          statusCode: 404,
+          headers,
+          body: JSON.stringify({ error: 'Célula do usuário não encontrada' })
+        };
+      }
+
+      if (userCellId !== requestedCellId) {
+        return {
+          statusCode: 403,
+          headers,
+          body: JSON.stringify({ error: 'Acesso negado a membros de outra célula' })
+        };
+      }
+
+      const result = await pool.query(
+        `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+                u.birth_date, u.age_group, u.gender, u.marital_status,
+                u.oikos1, u.oikos2, u.created_at
+         FROM users u
+         WHERE u.cell_id = $1
+         ORDER BY u.name ASC`,
+        [requestedCellId]
+      );
 
       return {
         statusCode: 200,
