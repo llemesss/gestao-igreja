@@ -60,7 +60,7 @@ export default function DashboardSupervisorView({
           </div>
           <div className="text-right">
             <span className="text-sm font-medium text-gray-700">
-              Células Supervisionadas: <span className="text-blue-600 font-semibold">{supervisedCells.length}</span>
+              Células Supervisionadas: <span className="text-blue-600 font-semibold">{Array.isArray(supervisedCells) ? supervisedCells.length : 0}</span>
             </span>
           </div>
         </div>
