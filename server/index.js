@@ -44,7 +44,16 @@ const verifyToken = (req, res, next) => {
 };
 
 // Health
-app.get('/api/health', (req, res) => res.json({ ok: true, timestamp: new Date().toISOString() }));
+app.get('/api/health', async (req, res) => {
+  try {
+    const ping = await pool.query('SELECT 1');
+    const dbOk = !!ping?.rows?.length;
+    return res.json({ ok: true, db: dbOk, timestamp: new Date().toISOString() });
+  } catch (e) {
+    console.error('Health DB check failed:', e);
+    return res.json({ ok: true, db: false, timestamp: new Date().toISOString() });
+  }
+});
 
 // Auth routes
 app.post('/api/auth/login', async (req, res) => {
@@ -74,26 +83,45 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 app.post('/api/auth/register', async (req, res) => {
+  const start = Date.now();
   try {
     const { name, email, password } = req.body || {};
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
     }
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    const emailOk = /.+@.+\..+/.test(email);
+    if (!emailOk) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+    if (String(password).length < 6) {
+      return res.status(400).json({ error: 'Senha deve ter ao menos 6 caracteres' });
+    }
+
+    console.log('[REGISTER] Tentativa', { email, nameLen: String(name).length });
+
+    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
     if (existing.rows.length > 0) {
+      console.log('[REGISTER] conflito de email', { email });
       return res.status(409).json({ error: 'Email já está em uso' });
     }
+
     const passwordHash = await bcrypt.hash(password, 10);
     const userId = uuidv4();
-    await pool.query(
-      `INSERT INTO users (id, name, email, password_hash, role, created_at)
-       VALUES ($1, $2, $3, $4, 'MEMBRO', NOW())`,
-      [userId, name, email, passwordHash]
-    );
-    const token = jwt.sign({ userId, email, role: 'MEMBRO' }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-    return res.status(201).json({ token, user: { id: userId, name, email, role: 'MEMBRO' } });
+    const insertSql = `INSERT INTO users (id, name, email, password_hash, role, created_at)
+                       VALUES ($1, $2, $3, $4, 'MEMBRO', NOW())`;
+    await pool.query(insertSql, [userId, name, email.toLowerCase(), passwordHash]);
+
+    const token = jwt.sign({ userId, email: email.toLowerCase(), role: 'MEMBRO' }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    console.log('[REGISTER] sucesso', { email, ms: Date.now() - start });
+    return res.status(201).json({ token, user: { id: userId, name, email: email.toLowerCase(), role: 'MEMBRO' } });
   } catch (err) {
-    console.error('Erro em /api/auth/register:', err);
+    console.error('Erro em /api/auth/register:', {
+      message: err?.message,
+      code: err?.code,
+      detail: err?.detail,
+      constraint: err?.constraint,
+      stack: err?.stack,
+    });
     if (err?.code === '23505') {
       return res.status(409).json({ error: 'Email já está em uso' });
     }
@@ -108,11 +136,11 @@ app.get('/api/users/:id', verifyToken, async (req, res) => {
     const userQuery = `
       SELECT id, name, email, phone, role, cell_id
       FROM users
-      WHERE id = $1
+      WHERE id = $1 AND status = 'ACTIVE'
     `;
     const userResult = await pool.query(userQuery, [targetUserId]);
     if (userResult.rows.length === 0) {
-      return res.status(404).json({ message: 'Usuário não encontrado' });
+      return res.status(404).json({ message: 'Usuário não encontrado ou inativo' });
     }
     const userProfile = userResult.rows[0];
 
@@ -224,6 +252,70 @@ app.post('/api/prayers/register', verifyToken, async (req, res) => {
   }
 });
 
+// Prayers: status de hoje (compatível com frontend)
+app.get('/api/prayers/status-today', verifyToken, async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const today = new Date().toISOString().split('T')[0];
+    const existing = await pool.query(
+      'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2 LIMIT 1',
+      [userId, today]
+    );
+    return res.json({ hasPrayed: existing.rows.length > 0 });
+  } catch (err) {
+    console.error('Erro em GET /api/prayers/status-today', err);
+    return res.status(500).json({ error: 'Erro ao verificar status de oração' });
+  }
+});
+
+// Prayers: estatísticas simples para dashboard (compatível com frontend)
+app.get('/api/prayers/stats', verifyToken, async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const statsQuery = `
+      SELECT 
+        COUNT(CASE WHEN prayer_date >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as "prayersThisWeek",
+        COUNT(CASE WHEN prayer_date >= DATE_TRUNC('month', CURRENT_DATE) THEN 1 END) as "prayersThisMonth",
+        COUNT(CASE WHEN prayer_date = CURRENT_DATE THEN 1 END) > 0 as "prayersToday"
+      FROM daily_prayer_log 
+      WHERE user_id = $1
+    `;
+    const result = await pool.query(statsQuery, [userId]);
+    const row = result.rows[0] || {};
+    return res.json({
+      prayersToday: Boolean(row.prayersToday),
+      prayersThisWeek: parseInt(row.prayersThisWeek || 0),
+      prayersThisMonth: parseInt(row.prayersThisMonth || 0)
+    });
+  } catch (err) {
+    console.error('Erro em GET /api/prayers/stats', err);
+    return res.status(500).json({ error: 'Erro ao obter estatísticas de oração' });
+  }
+});
+
+// Prayers: endpoint legado para registro (POST /api/prayers)
+app.post('/api/prayers', verifyToken, async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const today = new Date().toISOString().split('T')[0];
+    const exists = await pool.query(
+      'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2',
+      [userId, today]
+    );
+    if (exists.rows.length > 0) {
+      return res.status(200).json({ message: 'Oração do dia já registrada.' });
+    }
+    await pool.query(
+      `INSERT INTO daily_prayer_log (id, user_id, prayer_date) VALUES ($1, $2, $3)`,
+      [uuidv4(), userId, today]
+    );
+    return res.status(201).json({ message: 'Oração registrada com sucesso!' });
+  } catch (err) {
+    console.error('Erro em POST /api/prayers', err);
+    return res.status(500).json({ error: 'Erro ao registrar oração' });
+  }
+});
+
 // Prayers: minhas estatísticas
 app.get('/api/prayers/my-stats', verifyToken, async (req, res) => {
   try {
@@ -244,17 +336,99 @@ app.get('/api/prayers/my-stats', verifyToken, async (req, res) => {
 // Cells: listar células (simplificado)
 app.get('/api/cells', verifyToken, async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT c.id, c.name, c.supervisor_id, c.created_at, c.updated_at,
-             s.name as supervisor_name
-      FROM cells c
-      LEFT JOIN users s ON c.supervisor_id = s.id
-      ORDER BY c.name ASC
-    `);
+    const { userId, role } = req.user;
+    let query = '';
+    let params = [];
+
+    switch (role) {
+      case 'ADMIN':
+      case 'PASTOR':
+      case 'COORDENADOR':
+        query = `
+          SELECT c.id, c.name, c.supervisor_id, c.created_at, c.updated_at,
+                 s.name as supervisor_name
+          FROM cells c
+          LEFT JOIN users s ON c.supervisor_id = s.id
+          ORDER BY c.name ASC
+        `;
+        break;
+      case 'SUPERVISOR':
+        query = `
+          SELECT c.id, c.name, c.supervisor_id, c.created_at, c.updated_at,
+                 s.name as supervisor_name
+          FROM cells c
+          LEFT JOIN users s ON c.supervisor_id = s.id
+          WHERE c.supervisor_id = $1
+          ORDER BY c.name ASC
+        `;
+        params = [userId];
+        break;
+      case 'LIDER':
+      case 'MEMBRO':
+        query = `
+          SELECT c.id, c.name, c.supervisor_id, c.created_at, c.updated_at,
+                 s.name as supervisor_name
+          FROM cells c
+          LEFT JOIN users s ON c.supervisor_id = s.id
+          WHERE c.id = (SELECT cell_id FROM users WHERE id = $1)
+          ORDER BY c.name ASC
+        `;
+        params = [userId];
+        break;
+      default:
+        return res.status(403).json({ error: 'Role não reconhecido' });
+    }
+
+    const result = await pool.query(query, params);
     return res.json(result.rows);
   } catch (err) {
     console.error('Erro em GET /api/cells', err);
     return res.status(500).json({ error: 'Erro ao listar células' });
+  }
+});
+
+// Cells: membros da célula especificada
+// Permite acesso se o usuário for membro da célula OU líder designado da célula
+app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const requestedCellId = req.params.id;
+
+    // Verificar se usuário é membro da célula solicitada
+    const userCellRes = await pool.query('SELECT cell_id FROM users WHERE id = $1', [userId]);
+    const userCellId = userCellRes.rows[0]?.cell_id;
+
+    // Verificar se usuário é líder designado da célula solicitada
+    let isLeaderOfCell = false;
+    try {
+      const leaderRes = await pool.query(
+        'SELECT 1 FROM cell_leaders WHERE user_id = $1 AND cell_id = $2 LIMIT 1',
+        [userId, requestedCellId]
+      );
+      isLeaderOfCell = leaderRes.rows.length > 0;
+    } catch (e) {
+      // Se a tabela não existir ou der erro, mantém a regra básica por membership
+      console.warn('Aviso: consulta a cell_leaders falhou ou tabela ausente. Permitindo apenas membros da própria célula.');
+    }
+
+    if (!isLeaderOfCell && userCellId !== requestedCellId) {
+      return res.status(403).json({ error: 'Acesso negado: permitido apenas para membros ou líderes da própria célula' });
+    }
+
+    const result = await pool.query(
+      `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+              u.birth_date, u.age_group, u.gender, u.marital_status,
+              u.oikos1, u.oikos2, u.created_at
+       FROM users u
+       WHERE u.cell_id = $1
+       ORDER BY u.name ASC`,
+      [requestedCellId]
+    );
+
+    return res.json(result.rows);
+  } catch (err) {
+    console.error('Erro em GET /api/cells/:id/members', err);
+    return res.status(500).json({ error: 'Erro ao listar membros da célula' });
   }
 });
 

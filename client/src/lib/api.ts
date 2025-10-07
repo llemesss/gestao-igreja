@@ -4,19 +4,21 @@ import Cookies from 'js-cookie';
 import { AuthResponse, LoginCredentials, RegisterData } from '@/types';
 import { auth } from './auth';
 
-// Base da API: normaliza o sufixo /api e evita variações como /API
+// Base da API: aceita backend Express (/api) e Netlify Functions (/.netlify/functions)
 function normalizeApiBase(url?: string) {
   if (!url) return 'http://localhost:5000/api';
   let u = url.trim();
   // Remove barras no final
   u = u.replace(/\/+$/, '');
-  // Garante sufixo /api em minúsculas
-  if (/\/api$/i.test(u)) {
-    u = u.replace(/\/api$/i, '/api');
-  } else {
-    u = `${u}/api`;
+  // Se apontar para Netlify Functions, manter como está
+  if (u.includes('/.netlify/functions')) {
+    return u; // ex: https://site.netlify.app/.netlify/functions
   }
-  return u;
+  // Caso contrário, garantir sufixo /api
+  if (/\/api$/i.test(u)) {
+    return u.replace(/\/api$/i, '/api');
+  }
+  return `${u}/api`;
 }
 
 const API_URL = normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);

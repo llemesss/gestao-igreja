@@ -48,8 +48,8 @@ function MeuPerfilView() {
     async function loadProfile() {
       try {
         setIsLoading(true);
-        const response = await api.get('/users/profile');
-        const userData = response.data;
+        const response = await api.get('/me');
+        const userData = response.data?.user || response.data; // compatível com ambos formatos
 
         // Mapear os dados para o formato do formulário
         const formData: ProfileFormData = {
@@ -79,8 +79,8 @@ function MeuPerfilView() {
           previous_church: userData.previous_church || '',
           transfer_info: userData.transfer_info || '',
           has_children: userData.has_children || false,
-          oikos1_name: userData.oikos && userData.oikos[0] ? userData.oikos[0].name : '',
-          oikos2_name: userData.oikos && userData.oikos[1] ? userData.oikos[1].name : '',
+          oikos1_name: userData.oikos1 || '',
+          oikos2_name: userData.oikos2 || '',
         };
 
         reset(formData);

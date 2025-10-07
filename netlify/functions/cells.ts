@@ -215,31 +215,31 @@ export const handler: Handler = async (event, context) => {
       };
     }
 
-    // GET /:id/members -> Obter membros da célula especificada, apenas se for a célula do usuário
+    // GET /:id/members -> Obter membros da célula especificada
+    // Permite acesso se o usuário for membro da célula OU líder da célula
     if (path.match(/^\/[a-f0-9-]+\/members$/) && method === 'GET') {
       const requestedCellId = path.split('/')[1];
       const { userId } = user;
 
-      // Verificar a célula do usuário autenticado
+      // Verificar se usuário é membro da célula
       const userCellRes = await pool.query(
         'SELECT cell_id FROM users WHERE id = $1',
         [userId]
       );
-
       const userCellId = userCellRes.rows[0]?.cell_id;
-      if (!userCellId) {
-        return {
-          statusCode: 404,
-          headers,
-          body: JSON.stringify({ error: 'Célula do usuário não encontrada' })
-        };
-      }
 
-      if (userCellId !== requestedCellId) {
+      // Verificar se usuário é líder da célula
+      const leaderRes = await pool.query(
+        'SELECT 1 FROM cell_leaders WHERE user_id = $1 AND cell_id = $2 LIMIT 1',
+        [userId, requestedCellId]
+      );
+      const isLeaderOfCell = leaderRes.rows.length > 0;
+
+      if (!isLeaderOfCell && userCellId !== requestedCellId) {
         return {
           statusCode: 403,
           headers,
-          body: JSON.stringify({ error: 'Acesso negado a membros de outra célula' })
+          body: JSON.stringify({ error: 'Acesso negado: permitido apenas para membros ou líderes da própria célula' })
         };
       }
 
