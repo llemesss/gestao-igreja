@@ -37,6 +37,11 @@ app.use(cors(corsOptions));
 // Habilitar preflight globalmente
 app.options('*', cors(corsOptions));
 
+// Rota de teste mínima para isolamento
+app.get('/api/ping', (req, res) => {
+  res.status(200).send('Pong!');
+});
+
 // Seed de administrador: cria um admin padrão se nenhum existir
 const seedAdminIfMissing = async () => {
   try {
