@@ -15,10 +15,23 @@ export const usePrayerStore = create<PrayerStore>((set) => ({
   checkPrayerStatus: async () => {
     set({ isLoading: true });
     try {
+      // Primeiro tenta o endpoint de status de hoje
       const response = await api.get('/prayers/status-today');
-      set({ hasPrayedToday: response.data.hasPrayed });
+      if (response?.data?.hasPrayed !== undefined) {
+        set({ hasPrayedToday: Boolean(response.data.hasPrayed) });
+      } else {
+        // Fallback: usa /prayers/stats e deriva prayed_today
+        const statsRes = await api.get('/prayers/stats');
+        set({ hasPrayedToday: Boolean(statsRes?.data?.prayersToday) });
+      }
     } catch (error) {
-      console.error("Erro ao verificar status de oração:", error);
+      // Se /status-today falhar (ex.: 404 em alguns deploys), tenta /stats
+      try {
+        const statsRes = await api.get('/prayers/stats');
+        set({ hasPrayedToday: Boolean(statsRes?.data?.prayersToday) });
+      } catch (err) {
+        console.error('Erro ao verificar status de oração (fallback):', err);
+      }
     } finally {
       set({ isLoading: false });
     }

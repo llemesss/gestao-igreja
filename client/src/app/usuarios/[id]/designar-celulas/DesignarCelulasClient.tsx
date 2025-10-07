@@ -128,21 +128,8 @@ export default function DesignarCelulasClient({ params }: DesignarCelulasClientP
     try {
       setSaving(true);
       
-      // Usar o novo endpoint que aceita múltiplas células
-      const response = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${auth.getToken()}`
-        },
-        body: JSON.stringify({
-          cell_ids: selectedCells
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Erro ao atualizar supervisões');
-      }
+      // Usar apiMethods para atualizar várias supervisões via axios
+      await apiMethods.users.update(userId, { cell_ids: selectedCells });
 
       // Atualizar lista local
       const newAssignments = selectedCells.map(cellId => {

@@ -1,5 +1,6 @@
 import Cookies from 'js-cookie';
 import { User } from '@/types';
+import apiClient from './api';
 
 // Base da API: aceita backend Express (/api) e Netlify Functions (/.netlify/functions)
 function normalizeApiBase(url?: string) {
@@ -83,20 +84,11 @@ export const auth = {
       const token = auth.getToken();
       if (!token) return null;
 
-      const response = await fetch(`${API_URL}/me`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.user) {
-          // Atualizar cookies com dados frescos
-          Cookies.set(USER_KEY, JSON.stringify(data.user), { expires: 7 });
-          return data.user;
-        }
+      const response = await apiClient.get('/me');
+      const data = response.data;
+      if (data?.user) {
+        Cookies.set(USER_KEY, JSON.stringify(data.user), { expires: 7 });
+        return data.user;
       }
       return null;
     } catch (error) {

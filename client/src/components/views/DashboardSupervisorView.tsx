@@ -4,12 +4,12 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { useRouter } from 'next/navigation';
 import { PrayerStatusCard } from '@/components/PrayerStatusCard';
 import { Users } from 'lucide-react';
+import { apiMethods } from '@/lib/api';
 import CellCard from '@/components/CellCard';
 import SupervisedCellCard from '@/components/SupervisedCellCard';
 import { User, PrayerStats, Cell } from '@/types';
 
-// Base da API: usa NEXT_PUBLIC_API_URL ou fallback para dev local
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+// Removido uso direto de API_URL para evitar erros de base sem /api
 
 interface DashboardSupervisorViewProps {
   user: User;
@@ -28,27 +28,9 @@ export default function DashboardSupervisorView({
 
   const handleRegisterPrayer = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
-
-      const response = await fetch(`${API_URL}/prayers`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        // Recarregar a página para atualizar as estatísticas
-        window.location.reload();
-      } else {
-        const error = await response.json();
-        alert(error.error || 'Erro ao registrar oração');
-      }
+      await apiMethods.prayers.register();
+      // Recarregar a página para atualizar as estatísticas
+      window.location.reload();
     } catch (error) {
       console.error('Erro ao registrar oração:', error);
       alert('Erro ao registrar oração');

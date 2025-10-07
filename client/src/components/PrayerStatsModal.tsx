@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { auth } from '@/lib/auth';
+import { apiMethods } from '@/lib/api';
 import { X } from 'lucide-react';
 
-// Base da API: usa NEXT_PUBLIC_API_URL ou fallback para dev local
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+// Removido uso direto de API_URL para evitar erros de base sem /api
 
 interface PrayerStatsData {
   stats?: {
@@ -44,61 +44,15 @@ export function PrayerStatsModal({ isOpen, onClose, userId }: PrayerStatsModalPr
   const loadStats = async () => {
     setLoading(true);
     try {
-      const token = auth.getToken();
-      console.log('=== DEBUG PRAYER STATS ===');
-      console.log('Token obtido:', token ? `${token.substring(0, 20)}...` : 'NULL');
-      
-      if (!token) {
-        console.error('Token não encontrado nos cookies');
-        return;
-      }
-
-      // Se userId for fornecido, busca estatísticas de outro usuário, senão busca as próprias
-      const endpoint = userId 
-        ? `${API_URL}/prayers/stats/${userId}`
-        : `${API_URL}/prayers/my-stats`;
-
-      console.log('Endpoint:', endpoint);
-      console.log('UserId:', userId);
-      console.log('Headers que serão enviados:', {
-        'Authorization': `Bearer ${token.substring(0, 20)}...`,
-        'Content-Type': 'application/json'
-      });
-
-      const response = await fetch(endpoint, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      console.log('Status da resposta:', response.status);
-      console.log('Headers da resposta:', Object.fromEntries(response.headers.entries()));
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Dados recebidos com sucesso:', data);
-        setStats(data);
-      } else {
-        const errorText = await response.text();
-        console.error('Erro na resposta:', {
-          status: response.status,
-          statusText: response.statusText,
-          errorText: errorText
-        });
-        
-        // Se o token for inválido, redirecionar para login
-        if (response.status === 403 || response.status === 401) {
-          console.log('Token inválido, fazendo logout...');
-          auth.logout();
-          window.location.href = '/login';
-        }
-      }
+      // Usa axios via apiMethods; interceptors cuidam do token
+      const data = userId
+        ? await apiMethods.prayers.getUserStats(userId)
+        : await apiMethods.prayers.getMyStats();
+      setStats(data);
     } catch (error) {
       console.error('Erro ao carregar estatísticas (catch):', error);
     } finally {
       setLoading(false);
-      console.log('=== FIM DEBUG PRAYER STATS ===');
     }
   };
 

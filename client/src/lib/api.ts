@@ -82,7 +82,7 @@ const usersApi = {
     return response.data;
   },
 
-  update: async (id: string, data: Partial<{ name: string; email: string; role: string; cell_id: string }>) => {
+  update: async (id: string, data: Partial<{ name: string; email: string; role: string; cell_id: string; cell_ids: string[] }>) => {
     const response = await apiClient.put(`/users/${id}`, data);
     return response.data;
   },
@@ -211,19 +211,8 @@ const prayersApi = {
   },
 
   registerPrayer: async () => {
-    try {
-      const response = await fetch('/api/prayers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${auth.getToken()}`
-        }
-      });
-      return await response.json();
-    } catch (error) {
-      toast.error('Falha ao registrar oração. Tente novamente.');
-      throw error;
-    }
+    const response = await apiClient.post('/prayers/register');
+    return response.data;
   }
 };
 

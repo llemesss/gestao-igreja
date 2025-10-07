@@ -6,12 +6,11 @@ import { auth } from '@/lib/auth';
 import { PrayerStatusCard } from '@/components/PrayerStatusCard';
 import { useState } from 'react';
 import { Settings } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, apiMethods } from '@/lib/api';
 import { CreateEditCellModal } from '@/components/CreateEditCellModal';
 import { User, PrayerStats, Cell } from '@/types';
 
-// Base da API: usa NEXT_PUBLIC_API_URL ou fallback para dev local
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+// Removido uso direto de API_URL para evitar erros de base sem /api
 
 interface Leader {
   id: string;
@@ -118,26 +117,10 @@ export default function DashboardHomeView({ user, prayerStats, cells = [], userC
 
   const handleRegisterPrayer = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
-
-      const response = await fetch(`${API_URL}/prayers`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        // Recarregar a página para atualizar as estatísticas
+      // Usar axios com interceptors (cookie) e endpoint compatível
+      const response = await apiMethods.prayers.register();
+      if (response?.message) {
         window.location.reload();
-      } else {
-        const error = await response.json();
-        alert(error.error || 'Erro ao registrar oração');
       }
     } catch (error) {
       console.error('Erro ao registrar oração:', error);
