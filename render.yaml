@@ -29,4 +29,4 @@ services:
       - key: NEXT_PUBLIC_API_URL
         sync: false
       - key: NODE_VERSION
-        value: 18
+        value: 20
