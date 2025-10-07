@@ -447,15 +447,15 @@ app.post('/api/prayers/register', verifyToken, async (req, res) => {
     const { userId } = req.user;
     const today = new Date().toISOString().split('T')[0];
     const existing = await pool.query(
-      'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND DATE(prayed_at) = $2::date LIMIT 1',
+      'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2 LIMIT 1',
       [userId, today]
     );
     if (existing.rows.length > 0) {
       return res.status(200).json({ message: 'Oração do dia já registrada.' });
     }
     await pool.query(
-      `INSERT INTO daily_prayer_log (id, user_id, prayed_at) VALUES ($1, $2, NOW())`,
-      [uuidv4(), userId]
+      `INSERT INTO daily_prayer_log (id, user_id, prayer_date) VALUES ($1, $2, $3)`,
+      [uuidv4(), userId, today]
     );
     return res.json({ message: 'Oração registrada' });
   } catch (err) {
@@ -470,7 +470,7 @@ app.get('/api/prayers/status-today', verifyToken, async (req, res) => {
     const { userId } = req.user;
     const today = new Date().toISOString().split('T')[0];
     const existing = await pool.query(
-      'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND DATE(prayed_at) = $2::date LIMIT 1',
+      'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2 LIMIT 1',
       [userId, today]
     );
     return res.json({ hasPrayed: existing.rows.length > 0 });
@@ -486,9 +486,9 @@ app.get('/api/prayers/stats', verifyToken, async (req, res) => {
     const { userId } = req.user;
     const statsQuery = `
       SELECT 
-        COUNT(CASE WHEN DATE(prayed_at) >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as "prayersThisWeek",
-        COUNT(CASE WHEN DATE(prayed_at) >= DATE_TRUNC('month', CURRENT_DATE) THEN 1 END) as "prayersThisMonth",
-        COUNT(CASE WHEN DATE(prayed_at) = CURRENT_DATE THEN 1 END) > 0 as "prayersToday"
+        COUNT(CASE WHEN prayer_date >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as "prayersThisWeek",
+        COUNT(CASE WHEN prayer_date >= DATE_TRUNC('month', CURRENT_DATE) THEN 1 END) as "prayersThisMonth",
+        COUNT(CASE WHEN prayer_date = CURRENT_DATE THEN 1 END) > 0 as "prayersToday"
       FROM daily_prayer_log 
       WHERE user_id = $1
     `;
@@ -511,15 +511,15 @@ app.post('/api/prayers', verifyToken, async (req, res) => {
     const { userId } = req.user;
     const today = new Date().toISOString().split('T')[0];
     const exists = await pool.query(
-      'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND DATE(prayed_at) = $2::date',
+      'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2',
       [userId, today]
     );
     if (exists.rows.length > 0) {
       return res.status(200).json({ message: 'Oração do dia já registrada.' });
     }
     await pool.query(
-      `INSERT INTO daily_prayer_log (id, user_id, prayed_at) VALUES ($1, $2, NOW())`,
-      [uuidv4(), userId]
+      `INSERT INTO daily_prayer_log (id, user_id, prayer_date) VALUES ($1, $2, $3)`,
+      [uuidv4(), userId, today]
     );
     return res.status(201).json({ message: 'Oração registrada com sucesso!' });
   } catch (err) {
@@ -535,7 +535,7 @@ app.get('/api/prayers/my-stats', verifyToken, async (req, res) => {
     const days = parseInt(req.query.days || '7');
     const since = new Date(); since.setDate(since.getDate() - days);
     const countRes = await pool.query(
-      `SELECT COUNT(*) as count FROM daily_prayer_log WHERE user_id = $1 AND DATE(prayed_at) >= $2::date`,
+      `SELECT COUNT(*) as count FROM daily_prayer_log WHERE user_id = $1 AND prayer_date >= $2`,
       [userId, since.toISOString().split('T')[0]]
     );
     return res.json({ count: parseInt(countRes.rows[0].count || '0'), days });

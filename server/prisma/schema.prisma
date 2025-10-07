@@ -42,7 +42,7 @@ model CellLeader {
 model DailyPrayerLog {
   id        String   @id @default(uuid()) @db.Uuid
   user_id   String   @db.Uuid
-  prayed_at DateTime @db.Timestamptz(6)
+  prayer_date DateTime @db.Date
 
   @@map("daily_prayer_log")
 }
