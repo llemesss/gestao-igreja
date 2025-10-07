@@ -200,7 +200,7 @@ export const handler: Handler = async (event, context) => {
 
       const result = await pool.query(
         `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
-                u.birth_date, u.age_group, u.gender, u.marital_status,
+                u.birth_date, u.gender, u.marital_status,
                 u.oikos1, u.oikos2, u.created_at
          FROM users u
          WHERE u.cell_id = $1
@@ -245,7 +245,7 @@ export const handler: Handler = async (event, context) => {
 
       const result = await pool.query(
         `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
-                u.birth_date, u.age_group, u.gender, u.marital_status,
+                u.birth_date, u.gender, u.marital_status,
                 u.oikos1, u.oikos2, u.created_at
          FROM users u
          WHERE u.cell_id = $1
