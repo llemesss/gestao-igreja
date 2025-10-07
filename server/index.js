@@ -242,7 +242,7 @@ app.get('/api/users', verifyToken, async (req, res) => {
       return res.status(403).json({ error: 'Acesso negado' });
     }
 
-    const q = String(req.query.q || '').trim();
+    const q = String((req.query.q ?? req.query.search ?? '')).trim();
     const limit = Math.min(parseInt(req.query.limit || '200'), 500);
     const offset = Math.max(parseInt(req.query.offset || '0'), 0);
 
@@ -682,6 +682,46 @@ app.get('/api/cells/:id', verifyToken, async (req, res) => {
   }
 });
 
+// Cells: atualizar dados da célula (nome e opcionalmente supervisor)
+app.put('/api/cells/:id', verifyToken, async (req, res) => {
+  try {
+    const { role, userId } = req.user;
+    if (!['ADMIN', 'PASTOR', 'COORDENADOR', 'SUPERVISOR'].includes(role)) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+
+    const cellId = req.params.id;
+    const { name, supervisor_id } = req.body || {};
+
+    const fields = [];
+    const values = [];
+    if (typeof name === 'string' && name.trim().length > 0) { fields.push('name'); values.push(name.trim()); }
+
+    if (supervisor_id !== undefined) {
+      // Restrição: SUPERVISOR só pode se atribuir como supervisor ou remover (null)
+      if (role === 'SUPERVISOR' && supervisor_id && supervisor_id !== userId) {
+        return res.status(403).json({ error: 'Supervisor só pode se atribuir a si mesmo.' });
+      }
+      fields.push('supervisor_id'); values.push(supervisor_id || null);
+    }
+
+    if (fields.length === 0) {
+      return res.status(400).json({ error: 'Nenhum campo válido para atualizar' });
+    }
+
+    const set = fields.map((f, i) => `${f} = $${i+1}`).join(', ');
+    const sql = `UPDATE cells SET ${set}, updated_at = NOW() WHERE id = $${fields.length+1} RETURNING id, name, supervisor_id, created_at, updated_at`;
+    const result = await pool.query(sql, [...values, cellId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Célula não encontrada' });
+    }
+    return res.json({ message: 'Célula atualizada com sucesso', cell: result.rows[0] });
+  } catch (err) {
+    console.error('Erro em PUT /api/cells/:id', err);
+    return res.status(500).json({ error: 'Erro ao atualizar célula' });
+  }
+});
+
 // Cells: criar nova célula
 const createCellHandler = async (req, res) => {
   try {
@@ -809,6 +849,165 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
   } catch (err) {
     console.error('Erro em GET /api/cells/:id/members', err);
     return res.status(500).json({ error: 'Erro ao listar membros da célula' });
+  }
+});
+
+// Cells: adicionar membro à célula
+app.post('/api/cells/:id/members', verifyToken, async (req, res) => {
+  try {
+    const { userId, role } = req.user;
+    const cellId = req.params.id;
+    const targetUserId = req.body?.user_id;
+    if (!targetUserId) {
+      return res.status(400).json({ error: 'Parâmetro user_id é obrigatório' });
+    }
+
+    // Verificar permissões: líderes/coordenadores/pastores/admin sempre; supervisor da célula; líder da célula; membro da própria célula não pode adicionar outros
+    let hasAccess = ['ADMIN', 'PASTOR', 'COORDENADOR'].includes(role);
+    if (role === 'SUPERVISOR') {
+      const supCheck = await pool.query('SELECT 1 FROM cells WHERE id = $1 AND supervisor_id = $2 LIMIT 1', [cellId, userId]);
+      hasAccess = hasAccess || supCheck.rows.length > 0;
+    }
+    if (!hasAccess) {
+      // Checar se é líder da célula
+      try {
+        const leaderRes = await pool.query('SELECT 1 FROM cell_leaders WHERE user_id = $1 AND cell_id = $2 LIMIT 1', [userId, cellId]);
+        hasAccess = leaderRes.rows.length > 0;
+      } catch (e) {
+        // Se tabela não existe, não conceder acesso por liderança
+      }
+    }
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Acesso negado: permitido apenas para líderes, supervisores ou acima.' });
+    }
+
+    // Validar usuário de destino
+    const userRes = await pool.query('SELECT id FROM users WHERE id = $1', [targetUserId]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário alvo não encontrado' });
+    }
+
+    // Atualizar cell_id do usuário
+    const upd = await pool.query('UPDATE users SET cell_id = $1, updated_at = NOW() WHERE id = $2 RETURNING id, name, email, role, cell_id', [cellId, targetUserId]);
+    return res.status(200).json({ message: 'Membro adicionado à célula', user: upd.rows[0] });
+  } catch (err) {
+    console.error('Erro em POST /api/cells/:id/members', err);
+    return res.status(500).json({ error: 'Erro ao adicionar membro à célula' });
+  }
+});
+
+// Cells: remover membro da célula
+app.delete('/api/cells/:id/members/:userId', verifyToken, async (req, res) => {
+  try {
+    const { userId, role } = req.user;
+    const cellId = req.params.id;
+    const targetUserId = req.params.userId;
+
+    let hasAccess = ['ADMIN', 'PASTOR', 'COORDENADOR'].includes(role);
+    if (role === 'SUPERVISOR') {
+      const supCheck = await pool.query('SELECT 1 FROM cells WHERE id = $1 AND supervisor_id = $2 LIMIT 1', [cellId, userId]);
+      hasAccess = hasAccess || supCheck.rows.length > 0;
+    }
+    if (!hasAccess) {
+      try {
+        const leaderRes = await pool.query('SELECT 1 FROM cell_leaders WHERE user_id = $1 AND cell_id = $2 LIMIT 1', [userId, cellId]);
+        hasAccess = leaderRes.rows.length > 0;
+      } catch (e) {}
+    }
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Acesso negado: permitido apenas para líderes, supervisores ou acima.' });
+    }
+
+    const upd = await pool.query('UPDATE users SET cell_id = NULL, updated_at = NOW() WHERE id = $1 AND cell_id = $2 RETURNING id, name, email, role, cell_id', [targetUserId, cellId]);
+    if (upd.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não está nesta célula ou não existe' });
+    }
+    return res.status(200).json({ message: 'Membro removido da célula', user: upd.rows[0] });
+  } catch (err) {
+    console.error('Erro em DELETE /api/cells/:id/members/:userId', err);
+    return res.status(500).json({ error: 'Erro ao remover membro da célula' });
+  }
+});
+
+// Cells: atribuir supervisor à célula
+app.put('/api/cells/:id/supervisor', verifyToken, async (req, res) => {
+  try {
+    const { role, userId } = req.user;
+    const cellId = req.params.id;
+    const supervisorId = req.body?.supervisor_id ?? null;
+
+    // Apenas ADMIN/PASTOR/COORDENADOR podem definir qualquer supervisor.
+    // SUPERVISOR pode se atribuir a si próprio ou remover (null).
+    if (['ADMIN', 'PASTOR', 'COORDENADOR'].includes(role) === false) {
+      if (!(role === 'SUPERVISOR' && (supervisorId === null || supervisorId === userId))) {
+        return res.status(403).json({ error: 'Acesso negado para atribuir supervisor' });
+      }
+    }
+
+    if (supervisorId) {
+      const supExists = await pool.query('SELECT id FROM users WHERE id = $1', [supervisorId]);
+      if (supExists.rows.length === 0) {
+        return res.status(404).json({ error: 'Supervisor não encontrado' });
+      }
+    }
+
+    const upd = await pool.query('UPDATE cells SET supervisor_id = $1, updated_at = NOW() WHERE id = $2 RETURNING id, name, supervisor_id, created_at, updated_at', [supervisorId, cellId]);
+    if (upd.rows.length === 0) {
+      return res.status(404).json({ error: 'Célula não encontrada' });
+    }
+    return res.status(200).json({ message: 'Supervisor atualizado com sucesso', cell: upd.rows[0] });
+  } catch (err) {
+    console.error('Erro em PUT /api/cells/:id/supervisor', err);
+    return res.status(500).json({ error: 'Erro ao atualizar supervisor da célula' });
+  }
+});
+
+// Cells: gerenciar líderes da célula
+app.post('/api/cells/:id/leaders', verifyToken, async (req, res) => {
+  try {
+    const { role } = req.user;
+    if (!['ADMIN', 'PASTOR', 'COORDENADOR', 'SUPERVISOR'].includes(role)) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+    const cellId = req.params.id;
+    const leaderUserId = req.body?.user_id;
+    if (!leaderUserId) {
+      return res.status(400).json({ error: 'Parâmetro user_id é obrigatório' });
+    }
+    try {
+      await pool.query('INSERT INTO cell_leaders (user_id, cell_id, created_at) VALUES ($1, $2, NOW())', [leaderUserId, cellId]);
+      return res.status(201).json({ message: 'Líder atribuído à célula' });
+    } catch (e) {
+      if (e?.code === '23505') {
+        return res.status(200).json({ message: 'Usuário já é líder desta célula' });
+      }
+      console.warn('Erro ao inserir em cell_leaders', e?.message || e);
+      return res.status(500).json({ error: 'Erro ao atribuir líder (tabela ausente?)' });
+    }
+  } catch (err) {
+    console.error('Erro em POST /api/cells/:id/leaders', err);
+    return res.status(500).json({ error: 'Erro ao atribuir líder' });
+  }
+});
+
+app.delete('/api/cells/:id/leaders/:userId', verifyToken, async (req, res) => {
+  try {
+    const { role } = req.user;
+    if (!['ADMIN', 'PASTOR', 'COORDENADOR', 'SUPERVISOR'].includes(role)) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+    const cellId = req.params.id;
+    const leaderUserId = req.params.userId;
+    try {
+      const del = await pool.query('DELETE FROM cell_leaders WHERE user_id = $1 AND cell_id = $2', [leaderUserId, cellId]);
+      return res.status(200).json({ message: 'Líder removido da célula' });
+    } catch (e) {
+      console.warn('Erro ao remover de cell_leaders', e?.message || e);
+      return res.status(500).json({ error: 'Erro ao remover líder (tabela ausente?)' });
+    }
+  } catch (err) {
+    console.error('Erro em DELETE /api/cells/:id/leaders/:userId', err);
+    return res.status(500).json({ error: 'Erro ao remover líder' });
   }
 });
 
