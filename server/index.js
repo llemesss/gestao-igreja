@@ -391,7 +391,7 @@ app.get('/api/cells', verifyToken, async (req, res) => {
 // Permite acesso se o usuário for membro da célula OU líder designado da célula
 app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
   try {
-    const { userId } = req.user;
+    const { userId, role } = req.user;
     const requestedCellId = req.params.id;
 
     // Verificar se usuário é membro da célula solicitada
@@ -411,8 +411,30 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
       console.warn('Aviso: consulta a cell_leaders falhou ou tabela ausente. Permitindo apenas membros da própria célula.');
     }
 
-    if (!isLeaderOfCell && userCellId !== requestedCellId) {
-      return res.status(403).json({ error: 'Acesso negado: permitido apenas para membros ou líderes da própria célula' });
+    // Permissões adicionais por papel
+    let hasAccess = false;
+    if (['ADMIN', 'PASTOR', 'COORDENADOR'].includes(role)) {
+      hasAccess = true;
+    } else if (role === 'SUPERVISOR') {
+      try {
+        const supervisionRes = await pool.query(
+          'SELECT 1 FROM cells WHERE id = $1 AND supervisor_id = $2 LIMIT 1',
+          [requestedCellId, userId]
+        );
+        hasAccess = supervisionRes.rows.length > 0;
+      } catch (e) {
+        console.warn('Aviso: verificação de supervisor falhou.', e?.message);
+      }
+    }
+
+    // Acesso por ser líder da célula ou membro da célula
+    if (isLeaderOfCell || userCellId === requestedCellId) {
+      hasAccess = true;
+    }
+
+    if (!hasAccess) {
+      console.warn('Acesso negado a membros da célula', { userId, role, requestedCellId, userCellId, isLeaderOfCell });
+      return res.status(403).json({ error: 'Acesso negado: permitido apenas para membros, líderes ou supervisores da célula' });
     }
 
     const result = await pool.query(
