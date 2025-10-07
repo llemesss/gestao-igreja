@@ -188,6 +188,7 @@ app.post('/api/auth/register', async (req, res) => {
 app.get('/api/users/:id', verifyToken, async (req, res) => {
   try {
     const targetUserId = req.params.id;
+    // 1) Perfil do usuário ativo
     const userQuery = `
       SELECT id, name, email, phone, role, cell_id
       FROM users
@@ -195,35 +196,36 @@ app.get('/api/users/:id', verifyToken, async (req, res) => {
     `;
     const userResult = await pool.query(userQuery, [targetUserId]);
     if (userResult.rows.length === 0) {
-      return res.status(404).json({ message: 'Usuário não encontrado ou inativo' });
+      return res.status(404).json({ message: 'Usuário não encontrado' });
     }
     const userProfile = userResult.rows[0];
 
-    const today = new Date(); today.setHours(0,0,0,0);
-    const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(today.getDate() - 7); sevenDaysAgo.setHours(0,0,0,0);
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-
-    const [prayedTodayCount, prayersThisWeek, prayersThisMonth, totalPrayers, lastPrayerResult] = await Promise.all([
-      pool.query(`SELECT COUNT(*) as count FROM daily_prayer_log WHERE user_id = $1 AND prayer_date::date = $2::date`, [targetUserId, today.toISOString().split('T')[0]]),
-      pool.query(`SELECT COUNT(*) as count FROM daily_prayer_log WHERE user_id = $1 AND prayer_date >= $2`, [targetUserId, sevenDaysAgo.toISOString().split('T')[0]]),
-      pool.query(`SELECT COUNT(*) as count FROM daily_prayer_log WHERE user_id = $1 AND prayer_date >= $2`, [targetUserId, startOfMonth.toISOString().split('T')[0]]),
-      pool.query(`SELECT COUNT(*) as count FROM daily_prayer_log WHERE user_id = $1`, [targetUserId]),
-      pool.query(`SELECT prayer_date FROM daily_prayer_log WHERE user_id = $1 ORDER BY prayer_date DESC LIMIT 1`, [targetUserId])
+    // 2) Estatísticas de oração
+    const [countResult, lastResult] = await Promise.all([
+      pool.query(
+        'SELECT COUNT(*)::int AS total_prayers FROM daily_prayer_log WHERE user_id = $1',
+        [targetUserId]
+      ),
+      pool.query(
+        'SELECT MAX(prayer_date) AS last_prayer_date FROM daily_prayer_log WHERE user_id = $1',
+        [targetUserId]
+      )
     ]);
 
-    return res.json({
-      user: userProfile,
+    const totalPrayers = countResult.rows[0]?.total_prayers ?? 0;
+    const lastPrayerDate = lastResult.rows[0]?.last_prayer_date ?? null;
+
+    // 3) Resposta unificada
+    return res.status(200).json({
+      profile: userProfile,
       stats: {
-        prayedToday: parseInt(prayedTodayCount.rows[0]?.count || '0'),
-        thisWeek: parseInt(prayersThisWeek.rows[0]?.count || '0'),
-        thisMonth: parseInt(prayersThisMonth.rows[0]?.count || '0'),
-        total: parseInt(totalPrayers.rows[0]?.count || '0'),
-        lastPrayerDate: lastPrayerResult.rows[0]?.prayer_date || null,
-      }
+        totalPrayers,
+        lastPrayerDate,
+      },
     });
   } catch (err) {
     console.error('Erro em GET /api/users/:id', err);
-    return res.status(500).json({ error: 'Erro interno ao obter usuário' });
+    return res.status(500).json({ message: 'Erro interno no servidor' });
   }
 });
 
