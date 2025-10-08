@@ -2,6 +2,7 @@
 const nextConfig = {
   // Removendo export temporariamente para usar build padrão
   // output: 'export',
+  output: 'standalone',
   trailingSlash: true,
   images: {
     unoptimized: true
