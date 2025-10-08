@@ -62,13 +62,18 @@ export default function DesignarPessoasClient({ params }: { params: { id: string
       // Carregar todos os usuários
       const usersResponse = await api.get('/users');
       if (usersResponse.data) {
-        setUsers(usersResponse.data);
+        setUsers(Array.isArray(usersResponse.data) ? usersResponse.data : []);
+      } else {
+        setUsers([]);
       }
 
       // Carregar membros atuais da célula
       const membersResponse = await api.get(`/cells/${cellId}/members`);
       if (membersResponse.data) {
-        setCurrentMembers(membersResponse.data.members || []);
+        const members = Array.isArray(membersResponse.data.members) ? membersResponse.data.members : [];
+        setCurrentMembers(members);
+      } else {
+        setCurrentMembers([]);
       }
     } catch (error) {
       console.error('Erro ao carregar dados:', error);

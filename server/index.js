@@ -261,9 +261,44 @@ app.get('/api/users', verifyToken, async (req, res) => {
     params.push(limit, offset);
 
     const result = await pool.query(sql, params);
-    return res.json({ users: result.rows, count: result.rows.length });
+    // Sempre retornar um array de usuários
+    return res.json(result.rows || []);
   } catch (err) {
     console.error('Erro em GET /api/users', err);
+    return res.status(500).json({ error: 'Erro interno ao listar usuários' });
+  }
+});
+
+// Alias em português: GET /api/usuarios -> Listagem retornando array
+app.get('/api/usuarios', verifyToken, async (req, res) => {
+  try {
+    const { role } = req.user;
+    if (!['ADMIN', 'PASTOR', 'COORDENADOR', 'SUPERVISOR'].includes(role)) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+
+    const q = String((req.query.q ?? req.query.search ?? '')).trim();
+    const limit = Math.min(parseInt(req.query.limit || '200'), 500);
+    const offset = Math.max(parseInt(req.query.offset || '0'), 0);
+
+    let sql = `
+      SELECT u.id, u.name, u.email, u.role, u.cell_id, u.created_at,
+             c.name as cell_name
+      FROM users u
+      LEFT JOIN cells c ON c.id = u.cell_id
+    `;
+    const params = [];
+    if (q) {
+      params.push(`%${q.toLowerCase()}%`);
+      sql += ` WHERE LOWER(u.name) LIKE $1 OR LOWER(u.email) LIKE $1`;
+    }
+    sql += ` ORDER BY u.created_at DESC NULLS LAST, u.name ASC LIMIT $${params.length+1} OFFSET $${params.length+2}`;
+    params.push(limit, offset);
+
+    const result = await pool.query(sql, params);
+    return res.json(result.rows || []);
+  } catch (err) {
+    console.error('Erro em GET /api/usuarios', err);
     return res.status(500).json({ error: 'Erro interno ao listar usuários' });
   }
 });
@@ -599,9 +634,64 @@ app.get('/api/cells', verifyToken, async (req, res) => {
     }
 
     const result = await pool.query(query, params);
-    return res.json(result.rows);
+    // Sempre retornar um array de células
+    return res.json(result.rows || []);
   } catch (err) {
     console.error('Erro em GET /api/cells', err);
+    return res.status(500).json({ error: 'Erro ao listar células' });
+  }
+});
+
+// Alias em português: GET /api/celulas -> Listagem retornando array
+app.get('/api/celulas', verifyToken, async (req, res) => {
+  try {
+    const { userId, role } = req.user;
+    let query = '';
+    let params = [];
+
+    switch (role) {
+      case 'ADMIN':
+      case 'PASTOR':
+      case 'COORDENADOR':
+        query = `
+          SELECT c.id, c.name, c.supervisor_id, c.created_at, c.updated_at,
+                 s.name as supervisor_name
+          FROM cells c
+          LEFT JOIN users s ON c.supervisor_id = s.id
+          ORDER BY c.name ASC
+        `;
+        break;
+      case 'SUPERVISOR':
+        query = `
+          SELECT c.id, c.name, c.supervisor_id, c.created_at, c.updated_at,
+                 s.name as supervisor_name
+          FROM cells c
+          LEFT JOIN users s ON c.supervisor_id = s.id
+          WHERE c.supervisor_id = $1
+          ORDER BY c.name ASC
+        `;
+        params = [userId];
+        break;
+      case 'LIDER':
+      case 'MEMBRO':
+        query = `
+          SELECT c.id, c.name, c.supervisor_id, c.created_at, c.updated_at,
+                 s.name as supervisor_name
+          FROM cells c
+          LEFT JOIN users s ON c.supervisor_id = s.id
+          WHERE c.id = (SELECT cell_id FROM users WHERE id = $1)
+          ORDER BY c.name ASC
+        `;
+        params = [userId];
+        break;
+      default:
+        return res.status(403).json({ error: 'Role não reconhecido' });
+    }
+
+    const result = await pool.query(query, params);
+    return res.json(result.rows || []);
+  } catch (err) {
+    console.error('Erro em GET /api/celulas', err);
     return res.status(500).json({ error: 'Erro ao listar células' });
   }
 });

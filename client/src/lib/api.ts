@@ -74,7 +74,9 @@ const authApi = {
 const usersApi = {
   getAll: async (filters?: { role?: string; cell_id?: string; search?: string }) => {
     const response = await apiClient.get('/users', { params: filters });
-    return response.data;
+    const data = response.data;
+    // Normalizar para sempre retornar um array
+    return Array.isArray(data?.users) ? data.users : (Array.isArray(data) ? data : []);
   },
 
   getById: async (id: string) => {

@@ -67,7 +67,7 @@ function EditUserModal({ user, isOpen, onClose, onSave, loading }: EditUserModal
       if (canViewCellDetails) {
         // Para cada célula, buscar detalhes incluindo líderes
         const cellsWithLeaders = await Promise.all(
-          (response || []).map(async (cell: { id: string; name: string }) => {
+          (Array.isArray(response) ? response : []).map(async (cell: { id: string; name: string }) => {
             try {
               const cellDetail = await apiMethods.cells.getDetail(cell.id);
               return {
@@ -89,7 +89,7 @@ function EditUserModal({ user, isOpen, onClose, onSave, loading }: EditUserModal
         setCells(cellsWithLeaders);
       } else {
         // Para usuários MEMBRO, apenas definir células básicas sem buscar detalhes
-        const basicCells = (response || []).map((cell: { id: string; name: string }) => ({
+        const basicCells = (Array.isArray(response) ? response : []).map((cell: { id: string; name: string }) => ({
           id: cell.id,
           name: cell.name,
           leaders: []
@@ -288,10 +288,8 @@ export default function UsuariosPage() {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const response = await apiMethods.users.getAll();
-      if (response.users) {
-        setUsers(response.users);
-      }
+      const list = await apiMethods.users.getAll();
+      setUsers(Array.isArray(list) ? list : []);
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
     } finally {
@@ -335,7 +333,7 @@ export default function UsuariosPage() {
     router.push(`/usuarios/${user.id}/designar-celulas`);
   };
 
-  const filteredUsers = users.filter(user =>
+  const filteredUsers = (Array.isArray(users) ? users : []).filter(user =>
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email.toLowerCase().includes(searchTerm.toLowerCase())
   );

@@ -375,7 +375,7 @@ export default function GerenciarUsuariosView() {
       
       // Carregar usuários
       const usersResponse = await api.get('/users');
-      const usersData = usersResponse.data || [];
+      const usersData = Array.isArray(usersResponse.data) ? usersResponse.data : [];
       
       // Para cada supervisor, buscar suas células supervisionadas
       const usersWithSupervisedCells = await Promise.all(
@@ -403,7 +403,7 @@ export default function GerenciarUsuariosView() {
       
       // Carregar células
       const cellsResponse = await api.get('/cells');
-      setCells(cellsResponse.data || []);
+      setCells(Array.isArray(cellsResponse.data) ? cellsResponse.data : []);
       
     } catch (error) {
       console.error('Erro ao carregar dados:', error);

@@ -60,12 +60,10 @@ export default function EditarCelulaClient() {
 
       // Carregar supervisores disponíveis
       const usersResponse = await apiMethods.users.getAll();
-      if (usersResponse.users) {
-        const availableSupervisors = usersResponse.users.filter((user: User) => 
-          user.role === 'SUPERVISOR' || user.role === 'COORDENADOR' || user.role === 'PASTOR' || user.role === 'ADMIN'
-        );
-        setSupervisors(availableSupervisors);
-      }
+      const availableSupervisors = (Array.isArray(usersResponse) ? usersResponse : []).filter((user: User) => 
+        user.role === 'SUPERVISOR' || user.role === 'COORDENADOR' || user.role === 'PASTOR' || user.role === 'ADMIN'
+      );
+      setSupervisors(availableSupervisors);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {

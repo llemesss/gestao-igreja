@@ -78,7 +78,10 @@ export default function DashboardHomeView({ user, prayerStats, cells = [], userC
         updated_at: cellData.updated_at
       });
 
-      setLeaders(leadersResponse.data.users?.map((leader: { id: string; name: string; role: string }) => ({
+      const rawLeaders = Array.isArray(leadersResponse.data)
+        ? leadersResponse.data
+        : (leadersResponse.data?.users || []);
+      setLeaders(rawLeaders.map((leader: { id: string; name: string; role: string }) => ({
         id: leader.id.toString(),
         name: leader.name,
         role: leader.role

@@ -124,7 +124,7 @@ function DesignationModal({ isOpen, onClose, cell, onRefresh }: DesignationModal
   const loadUsers = async () => {
     try {
       const data = await apiMethods.users.getAll();
-      setUsers(data);
+      setUsers(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
       setUsers([]); // Garantir que users seja sempre um array

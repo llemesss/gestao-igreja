@@ -34,7 +34,7 @@ export default function AddMemberModal({ isOpen, onClose, cellId, onMemberAdded 
   }, [isOpen]);
 
   useEffect(() => {
-    const filtered = users.filter(user =>
+    const filtered = (Array.isArray(users) ? users : []).filter(user =>
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase())
     );
@@ -44,9 +44,8 @@ export default function AddMemberModal({ isOpen, onClose, cellId, onMemberAdded 
   const loadAvailableUsers = async () => {
     try {
       setLoading(true);
-      const response = await apiMethods.users.getAll();
-      // O endpoint retorna { users: [...] }, então precisamos acessar response.users
-      const availableUsers = response.users.filter((user: User) => !user.cell_id);
+      const list = await apiMethods.users.getAll();
+      const availableUsers = (Array.isArray(list) ? list : []).filter((user: User) => !user.cell_id);
       setUsers(availableUsers);
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
