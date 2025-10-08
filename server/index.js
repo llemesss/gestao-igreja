@@ -23,6 +23,36 @@ const pool = new Pool({
 const app = express();
 app.use(express.json());
 // CORS: permitir origem dinâmica e headers/métodos necessários
+// Fallback robusto de CORS para garantir headers em qualquer resposta, inclusive erros/502 do provider
+const allowedOriginsEnv = process.env.CORS_ORIGIN || '';
+const ALLOWED_ORIGINS = allowedOriginsEnv
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  // Se houver lista de origens permitidas, respeitar; senão, refletir origem dinamicamente
+  if (ALLOWED_ORIGINS.length > 0) {
+    if (origin && ALLOWED_ORIGINS.includes(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Vary', 'Origin');
+    }
+  } else {
+    if (origin) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Vary', 'Origin');
+    } else {
+      res.header('Access-Control-Allow-Origin', '*');
+    }
+  }
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
 const corsOptions = {
   origin: (origin, callback) => {
     // Permitir qualquer origem conhecida; com credenciais o header será ecoado
