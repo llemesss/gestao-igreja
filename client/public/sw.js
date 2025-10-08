@@ -14,8 +14,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   // IMPORTANTE: Só interceptar requisições GET para evitar problemas com POST/PUT/DELETE
   if (event.request.method !== 'GET') {
-    // Deixar requisições não-GET passarem normalmente sem interceptação
-    return;
+    return; // Deixa POST/PUT/DELETE seguirem sem SW
   }
 
   // Para requisições GET, também evitar interceptar APIs críticas
@@ -33,16 +32,19 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Para outras requisições GET (páginas, assets estáticos), usar cache básico
+  // Para outras requisições GET (páginas, assets estáticos), usar cache apenas como fallback
   event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Retornar do cache se disponível, senão buscar da rede
-        return response || fetch(event.request);
-      })
-      .catch(() => {
-        // Em caso de erro, tentar buscar da rede
-        return fetch(event.request);
-      })
+    (async () => {
+      try {
+        const network = await fetch(event.request);
+        // Opcional: atualizar cache em background
+        const cache = await caches.open('app-cache-v1');
+        cache.put(event.request, network.clone());
+        return network;
+      } catch (_) {
+        const cached = await caches.match(event.request);
+        return cached || Response.error();
+      }
+    })()
   );
 });
