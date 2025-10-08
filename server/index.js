@@ -67,6 +67,48 @@ app.use(cors(corsOptions));
 // Habilitar preflight globalmente
 app.options('*', cors(corsOptions));
 
+// Estado do schema em memória
+let HAS_USERS_STATUS = false;
+
+// Verifica se a coluna existe
+const checkUsersStatusColumn = async () => {
+  try {
+    const res = await pool.query(
+      `SELECT EXISTS (
+         SELECT 1 FROM information_schema.columns
+         WHERE table_name = 'users' AND column_name = 'status'
+       ) AS exists`
+    );
+    HAS_USERS_STATUS = !!res?.rows?.[0]?.exists;
+    if (!HAS_USERS_STATUS) {
+      console.warn('[SCHEMA] users.status ausente; rotas funcionarão sem filtro por status.');
+    }
+  } catch (e) {
+    console.warn('[SCHEMA] Falha ao verificar coluna users.status:', e?.message || e);
+  }
+};
+
+// Garantir schema mínimo (colunas/tabelas críticas) antes de continuar
+const ensureSchema = async () => {
+  try {
+    await pool.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE';
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
+    `);
+  } catch (e) {
+    console.warn('[SCHEMA] Falha ao garantir coluna users.status:', e?.message || e);
+  } finally {
+    // Atualiza flag em memória
+    await checkUsersStatusColumn();
+  }
+};
+
+// Executa verificação de schema
+ensureSchema().catch((e) => console.warn('[SCHEMA] erro inicial:', e?.message || e));
+
 // Rota de teste mínima para isolamento
 app.get('/api/ping', (req, res) => {
   res.status(200).send('Pong!');
@@ -91,20 +133,16 @@ const seedAdminIfMissing = async () => {
 
     if (existingUser.rows.length > 0) {
       const userId = existingUser.rows[0].id;
-      await pool.query(
-        `UPDATE users
-         SET role = 'ADMIN', password_hash = $2, name = $3, status = 'ACTIVE'
-         WHERE id = $1`,
-        [userId, passwordHash, defaultName]
-      );
+      const updateSql = `UPDATE users
+         SET role = 'ADMIN', password_hash = $2, name = $3${HAS_USERS_STATUS ? ", status = 'ACTIVE'" : ''}
+         WHERE id = $1`;
+      await pool.query(updateSql, [userId, passwordHash, defaultName]);
       console.log('[ADMIN SEED] Usuário existente promovido a ADMIN:', defaultEmail);
     } else {
       const userId = uuidv4();
-      await pool.query(
-        `INSERT INTO users (id, name, email, password_hash, role, status, created_at)
-         VALUES ($1, $2, $3, $4, 'ADMIN', 'ACTIVE', NOW())`,
-        [userId, defaultName, defaultEmail.toLowerCase(), passwordHash]
-      );
+      const insertSql = `INSERT INTO users (id, name, email, password_hash, role${HAS_USERS_STATUS ? ', status' : ''}, created_at)
+         VALUES ($1, $2, $3, $4, 'ADMIN'${HAS_USERS_STATUS ? ", 'ACTIVE'" : ''}, NOW())`;
+      await pool.query(insertSql, [userId, defaultName, defaultEmail.toLowerCase(), passwordHash]);
       console.log('[ADMIN SEED] ADMIN criado:', defaultEmail);
     }
   } catch (e) {
@@ -224,11 +262,9 @@ app.get('/api/users/:id', verifyToken, async (req, res) => {
   try {
     const targetUserId = req.params.id;
     // 1) Perfil do usuário ativo
-    const userQuery = `
-      SELECT id, name, email, phone, role, cell_id
-      FROM users
-      WHERE id = $1 AND status = 'ACTIVE'
-    `;
+    const userQuery = HAS_USERS_STATUS
+      ? `SELECT id, name, email, phone, role, cell_id FROM users WHERE id = $1 AND status = 'ACTIVE'`
+      : `SELECT id, name, email, phone, role, cell_id FROM users WHERE id = $1`;
     const userResult = await pool.query(userQuery, [targetUserId]);
     if (userResult.rows.length === 0) {
       return res.status(404).json({ message: 'Usuário não encontrado' });
@@ -494,7 +530,45 @@ app.put('/api/me', verifyToken, async (req, res) => {
       'father_name','mother_name','marital_status','spouse_name','education_level','profession',
       'conversion_date','transfer_info','has_children','oikos1','oikos2'
     ];
-    const entries = Object.entries(fields).filter(([k]) => allowed.includes(k));
+    const entriesRaw = Object.entries(fields).filter(([k]) => allowed.includes(k));
+    // Sanitização de tipos: datas para 'YYYY-MM-DD' e booleanos
+    const dateFields = new Set(['birth_date','conversion_date']);
+    const boolFields = new Set(['has_children']);
+    const entries = entriesRaw.map(([k, v]) => {
+      let val = v;
+      if (dateFields.has(k)) {
+        if (val === '' || val === null || typeof val === 'undefined') {
+          val = null;
+        } else if (typeof val === 'string') {
+          // Mantém apenas parte da data se vier com hora
+          const s = val.trim();
+          const iso = (() => {
+            // Se já estiver no padrão YYYY-MM-DD, usa direto
+            const m = s.match(/^\d{4}-\d{2}-\d{2}/);
+            if (m) return m[0];
+            const d = new Date(s);
+            if (isNaN(d.getTime())) return null;
+            return d.toISOString().slice(0, 10);
+          })();
+          val = iso ?? null;
+        } else {
+          const d = new Date(val);
+          val = isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+        }
+      } else if (boolFields.has(k)) {
+        const s = typeof val === 'string' ? val.trim().toLowerCase() : val;
+        const truthy = ['true','1','sim','yes','on'];
+        const falsy = ['false','0','nao','não','no','off',''];
+        if (typeof s === 'string') {
+          if (truthy.includes(s)) val = true;
+          else if (falsy.includes(s)) val = false;
+          else val = false;
+        } else {
+          val = !!val;
+        }
+      }
+      return [k, val];
+    });
     if (entries.length === 0) {
       return res.status(400).json({ error: 'Nenhum campo válido para atualizar' });
     }
