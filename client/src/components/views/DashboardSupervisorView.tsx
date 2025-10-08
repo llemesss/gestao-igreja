@@ -26,6 +26,8 @@ export default function DashboardSupervisorView({
 }: DashboardSupervisorViewProps) {
   const router = useRouter();
 
+  const safeSupervisedCells = Array.isArray(supervisedCells) ? supervisedCells : [];
+
   const handleRegisterPrayer = async () => {
     try {
       await apiMethods.prayers.register();
@@ -60,7 +62,7 @@ export default function DashboardSupervisorView({
           </div>
           <div className="text-right">
             <span className="text-sm font-medium text-gray-700">
-              Células Supervisionadas: <span className="text-blue-600 font-semibold">{Array.isArray(supervisedCells) ? supervisedCells.length : 0}</span>
+              Células Supervisionadas: <span className="text-blue-600 font-semibold">{safeSupervisedCells.length}</span>
             </span>
           </div>
         </div>
@@ -102,19 +104,18 @@ export default function DashboardSupervisorView({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {Array.isArray(supervisedCells) && supervisedCells.length > 0 ? (
+          {safeSupervisedCells.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {supervisedCells.map((cell) => (
+              {safeSupervisedCells.map((cell) => (
                 <SupervisedCellCard
                   key={cell.id}
                   id={cell.id.toString()}
                   name={cell.name}
                   supervisorName={cell.supervisor_name}
                   leaderName={
-                    (cell.leaders && cell.leaders.length > 0 
+                    (Array.isArray(cell.leaders) && cell.leaders.length > 0
                       ? cell.leaders.map(leader => leader.name).join(', ')
-                      : undefined
-                    )
+                      : undefined)
                   }
                   memberCount={cell.member_count}
                   onClick={handleCellClick}
