@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
 import { api } from '@/lib/api';
 
 interface ProfileFormData {
@@ -15,7 +16,6 @@ interface ProfileFormData {
   birth_city?: string;
   birth_state?: string;
   birth_date?: string;
-  age_group?: string;
   address?: string;
   address_number?: string;
   neighborhood?: string;
@@ -32,9 +32,15 @@ interface ProfileFormData {
   previous_church?: string;
   transfer_info?: string;
   has_children?: boolean;
-  oikos1_name?: string;
-  oikos2_name?: string;
+  oikos1?: string;
+  oikos2?: string;
 }
+
+const estadosDoBrasil = [
+  'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS',
+  'MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC',
+  'SP','SE','TO'
+];
 
 function MeuPerfilView() {
   const [isLoading, setIsLoading] = useState(true);
@@ -43,6 +49,19 @@ function MeuPerfilView() {
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<ProfileFormData>();
 
   const maritalStatus = watch('marital_status');
+  const birthDate = watch('birth_date');
+  const idade = (() => {
+    if (!birthDate) return null;
+    const hoje = new Date();
+    const nascimento = new Date(birthDate);
+    if (isNaN(nascimento.getTime())) return null;
+    let anos = hoje.getFullYear() - nascimento.getFullYear();
+    const mes = hoje.getMonth() - nascimento.getMonth();
+    if (mes < 0 || (mes === 0 && hoje.getDate() < nascimento.getDate())) {
+      anos--;
+    }
+    return anos >= 0 ? anos : null;
+  })();
 
   useEffect(() => {
     async function loadProfile() {
@@ -62,7 +81,6 @@ function MeuPerfilView() {
           birth_city: userData.birth_city || '',
           birth_state: userData.birth_state || '',
           birth_date: userData.birth_date ? userData.birth_date.split('T')[0] : '',
-          age_group: userData.age_group || '',
           address: userData.address || '',
           address_number: userData.address_number || '',
           neighborhood: userData.neighborhood || '',
@@ -79,8 +97,8 @@ function MeuPerfilView() {
           previous_church: userData.previous_church || '',
           transfer_info: userData.transfer_info || '',
           has_children: userData.has_children || false,
-          oikos1_name: userData.oikos1 || '',
-          oikos2_name: userData.oikos2 || '',
+          oikos1: userData.oikos1 || '',
+          oikos2: userData.oikos2 || '',
         };
 
         reset(formData);
@@ -102,10 +120,18 @@ function MeuPerfilView() {
     try {
       setIsSaving(true);
       await api.put('/me', data);
-      toast.success('Perfil atualizado com sucesso!');
+      toast.success('Perfil atualizado com sucesso!', {
+        position: 'top-center',
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeButton: true,
+        pauseOnHover: true,
+      });
     } catch (error) {
       console.error('Erro ao salvar perfil:', error);
-      toast.error('Erro ao salvar perfil');
+      toast.error('Erro ao salvar perfil', {
+        position: 'top-center',
+      });
     } finally {
       setIsSaving(false);
     }
@@ -121,6 +147,7 @@ function MeuPerfilView() {
 
   return (
     <div className="max-w-4xl mx-auto p-6">
+      <ToastContainer />
       <div className="bg-white rounded-lg shadow-md p-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Meu Perfil</h1>
         
@@ -205,17 +232,17 @@ function MeuPerfilView() {
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Faixa Etária
-              </label>
-              <input
-                type="text"
-                {...register('age_group')}
-                placeholder="Ex: 25-30 anos"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 placeholder-gray-500"
-              />
-            </div>
+            {/* Idade calculada dinamicamente */}
+            {idade !== null && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Idade
+                </label>
+                <p className="px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700">
+                  Você tem {idade} anos.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Nascimento */}
@@ -247,12 +274,15 @@ function MeuPerfilView() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Estado de Nascimento
               </label>
-              <input
-                type="text"
-                placeholder="Digite o estado"
+              <select
                 {...register('birth_state')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 placeholder-gray-500"
-              />
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-700"
+              >
+                <option value="">Selecione um estado</option>
+                {estadosDoBrasil.map((sigla) => (
+                  <option key={sigla} value={sigla}>{sigla}</option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -477,7 +507,7 @@ function MeuPerfilView() {
                 </label>
                 <input
                   type="text"
-                  {...register('oikos1_name')}
+                  {...register('oikos1')}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -488,7 +518,7 @@ function MeuPerfilView() {
                 </label>
                 <input
                   type="text"
-                  {...register('oikos2_name')}
+                  {...register('oikos2')}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
