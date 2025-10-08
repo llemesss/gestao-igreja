@@ -216,7 +216,8 @@ export default function GerenciarCelulasView() {
     columnHelper.accessor('leaders', {
       header: 'Líder(es)',
       cell: info => {
-        const leaders = info.getValue();
+        const leadersVal = info.getValue();
+        const leaders = Array.isArray(leadersVal) ? leadersVal : [];
         if (leaders.length === 0) {
           return <span className="text-gray-500 italic">Sem líder</span>;
         }
