@@ -193,9 +193,9 @@ export default function DashboardHomeView({ user, prayerStats, cells = [], userC
             <CardTitle>Minhas Células</CardTitle>
           </CardHeader>
           <CardContent>
-            {cells.length > 0 ? (
+            {Array.isArray(cells) && cells.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {cells.map((cell) => (
+                {(cells || []).map((cell) => (
                   <div
                     key={cell.id}
                     className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors cursor-pointer"

@@ -130,7 +130,7 @@ export function LiderCellView() {
                 <Users className="h-8 w-8 text-blue-600" />
                 <div className="ml-3">
                   <p className="text-sm font-medium text-blue-600">Total de Membros</p>
-                  <p className="text-2xl font-bold text-blue-900">{members.length}</p>
+                  <p className="text-2xl font-bold text-blue-900">{Array.isArray(members) ? members.length : 0}</p>
                 </div>
               </div>
             </div>
@@ -184,9 +184,9 @@ export function LiderCellView() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {members.length > 0 ? (
+          {Array.isArray(members) && members.length > 0 ? (
             <div className="space-y-4">
-              {members.map(member => (
+              {(members || []).map(member => (
                 <MemberListItem key={member.id} member={member} />
               ))}
             </div>
