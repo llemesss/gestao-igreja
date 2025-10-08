@@ -1,4 +1,5 @@
 import express from 'express';
+import PDFDocument from 'pdfkit';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
@@ -297,6 +298,140 @@ app.get('/api/users/:id', verifyToken, async (req, res) => {
   } catch (err) {
     console.error('Erro em GET /api/users/:id', err);
     return res.status(500).json({ message: 'Erro interno no servidor' });
+  }
+});
+
+// Users: report PDF - ficha do membro
+app.get('/api/users/reports/member/:id/pdf', verifyToken, async (req, res) => {
+  try {
+    const { userId, role } = req.user;
+    const targetUserId = req.params.id;
+
+    // Obter perfil básico do usuário alvo
+    const userSql = `SELECT u.id, u.name, u.email, u.phone, u.role, u.cell_id, c.name as cell_name
+                     FROM users u
+                     LEFT JOIN cells c ON c.id = u.cell_id
+                     WHERE u.id = $1`;
+    const userRes = await pool.query(userSql, [targetUserId]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    const target = userRes.rows[0];
+
+    // Permissões: admins e acima; supervisor se supervisiona célula; líder da célula; o próprio usuário
+    let allowed = ['ADMIN','PASTOR','COORDENADOR'].includes(role) || userId === targetUserId;
+    if (!allowed && role === 'SUPERVISOR' && target.cell_id) {
+      try {
+        const supCheck = await pool.query('SELECT 1 FROM cells WHERE id = $1 AND supervisor_id = $2 LIMIT 1', [target.cell_id, userId]);
+        allowed = supCheck.rows.length > 0;
+      } catch {}
+    }
+    if (!allowed && target.cell_id) {
+      try {
+        const leaderCheck = await pool.query('SELECT 1 FROM cell_leaders WHERE user_id = $1 AND cell_id = $2 LIMIT 1', [userId, target.cell_id]);
+        allowed = leaderCheck.rows.length > 0;
+      } catch {}
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+
+    // Estatísticas resumidas
+    const [countRes, lastRes] = await Promise.all([
+      pool.query('SELECT COUNT(*)::int AS total FROM daily_prayer_log WHERE user_id = $1', [targetUserId]),
+      pool.query('SELECT MAX(prayer_date) AS last FROM daily_prayer_log WHERE user_id = $1', [targetUserId])
+    ]);
+    const total = countRes.rows[0]?.total ?? 0;
+    const last = lastRes.rows[0]?.last ? new Date(lastRes.rows[0].last).toISOString().slice(0,10) : 'Nunca';
+
+    // Gerar PDF básico
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="ficha-${(target.name || 'membro').replace(/\s+/g,'-')}"`);
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    doc.pipe(res);
+    doc.fontSize(20).text('Ficha do Membro', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(12).text(`Nome: ${target.name || '-'}`);
+    doc.text(`Email: ${target.email || '-'}`);
+    doc.text(`Telefone: ${target.phone || '-'}`);
+    doc.text(`Papel: ${target.role || '-'}`);
+    doc.text(`Célula: ${target.cell_name || '-'}`);
+    doc.moveDown();
+    doc.fontSize(14).text('Estatísticas de Oração');
+    doc.fontSize(12).text(`Orações Registradas: ${total}`);
+    doc.text(`Última Oração: ${last}`);
+    doc.end();
+  } catch (err) {
+    console.error('Erro em GET /api/users/reports/member/:id/pdf', err);
+    return res.status(500).json({ error: 'Erro ao gerar PDF' });
+  }
+});
+
+// Users: report PDF - calendário de oração do membro
+app.get('/api/users/reports/calendar/:id/pdf', verifyToken, async (req, res) => {
+  try {
+    const { userId, role } = req.user;
+    const targetUserId = req.params.id;
+    const year = parseInt(String(req.query.year || new Date().getFullYear()));
+
+    const userRes = await pool.query('SELECT id, name, cell_id FROM users WHERE id = $1', [targetUserId]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    const target = userRes.rows[0];
+
+    let allowed = ['ADMIN','PASTOR','COORDENADOR'].includes(role) || userId === targetUserId;
+    if (!allowed && role === 'SUPERVISOR' && target.cell_id) {
+      try {
+        const supCheck = await pool.query('SELECT 1 FROM cells WHERE id = $1 AND supervisor_id = $2 LIMIT 1', [target.cell_id, userId]);
+        allowed = supCheck.rows.length > 0;
+      } catch {}
+    }
+    if (!allowed && target.cell_id) {
+      try {
+        const leaderCheck = await pool.query('SELECT 1 FROM cell_leaders WHERE user_id = $1 AND cell_id = $2 LIMIT 1', [userId, target.cell_id]);
+        allowed = leaderCheck.rows.length > 0;
+      } catch {}
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+
+    const datesRes = await pool.query(
+      `SELECT prayer_date FROM daily_prayer_log 
+       WHERE user_id = $1 AND EXTRACT(YEAR FROM prayer_date) = $2
+       ORDER BY prayer_date ASC`,
+      [targetUserId, year]
+    );
+    const prayedDates = datesRes.rows.map(r => new Date(r.prayer_date));
+
+    // PDF simples: título e lista de dias com oração
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="calendario-oracao-${(target.name || 'membro').replace(/\s+/g,'-')}-${year}.pdf"`);
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    doc.pipe(res);
+    doc.fontSize(18).text(`Calendário de Oração - ${year}`, { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(12).text(`Membro: ${target.name || '-'}`);
+    doc.moveDown();
+
+    const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    for (let m = 0; m < 12; m++) {
+      doc.fontSize(14).text(months[m]);
+      const monthDates = prayedDates.filter(d => d.getMonth() === m);
+      if (monthDates.length === 0) {
+        doc.fontSize(12).text('   (sem registros)');
+      } else {
+        const days = monthDates.map(d => d.getDate()).join(', ');
+        doc.fontSize(12).text(`   Dias com oração: ${days}`);
+      }
+      doc.moveDown(0.5);
+    }
+
+    doc.end();
+  } catch (err) {
+    console.error('Erro em GET /api/users/reports/calendar/:id/pdf', err);
+    return res.status(500).json({ error: 'Erro ao gerar PDF' });
   }
 });
 
