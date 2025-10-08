@@ -470,6 +470,62 @@ app.get('/api/users', verifyToken, async (req, res) => {
   }
 });
 
+// Users: GET /:id/supervised-cells -> lista de células supervisionadas por um usuário específico
+app.get('/api/users/:id/supervised-cells', verifyToken, async (req, res) => {
+  try {
+    const requester = req.user;
+    const targetUserId = req.params.id;
+
+    // Permissões: ADMIN, PASTOR, COORDENADOR podem consultar qualquer usuário.
+    // SUPERVISOR pode consultar apenas suas próprias células.
+    const canQueryAny = ['ADMIN', 'PASTOR', 'COORDENADOR'].includes(requester.role);
+    const isSelf = requester.userId === targetUserId;
+    if (!canQueryAny && !(requester.role === 'SUPERVISOR' && isSelf)) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+
+    const sql = `
+      SELECT c.id, c.name, c.supervisor_id, u.name AS supervisor_name,
+             (
+               SELECT COUNT(*) FROM users m WHERE m.cell_id = c.id
+             )::int AS member_count
+      FROM cells c
+      LEFT JOIN users u ON u.id = c.supervisor_id
+      WHERE c.supervisor_id = $1
+      ORDER BY c.name ASC
+    `;
+    const result = await pool.query(sql, [targetUserId]);
+
+    // Opcional: líderes (nome) por célula
+    let cells = result.rows || [];
+    try {
+      const ids = cells.map(c => c.id);
+      if (ids.length > 0) {
+        const leadersRes = await pool.query(
+          `SELECT cl.cell_id, u.id, u.name
+           FROM cell_leaders cl
+           JOIN users u ON u.id = cl.user_id
+           WHERE cl.cell_id = ANY($1::uuid[])`,
+          [ids]
+        );
+        const leadersByCell = leadersRes.rows.reduce((acc, row) => {
+          acc[row.cell_id] = acc[row.cell_id] || [];
+          acc[row.cell_id].push({ id: row.id, name: row.name });
+          return acc;
+        }, {});
+        cells = cells.map(c => ({ ...c, leaders: leadersByCell[c.id] || [] }));
+      }
+    } catch (e) {
+      console.warn('Aviso: consulta de líderes falhou ou tabela ausente. Prosseguindo sem líderes.', e?.message || e);
+    }
+
+    return res.json(cells);
+  } catch (err) {
+    console.error('Erro em GET /api/users/:id/supervised-cells', err);
+    return res.status(500).json({ error: 'Erro interno ao listar células supervisionadas' });
+  }
+});
+
 // Alias em português: GET /api/usuarios -> Listagem retornando array
 app.get('/api/usuarios', verifyToken, async (req, res) => {
   try {
