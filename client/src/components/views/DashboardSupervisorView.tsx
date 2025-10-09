@@ -62,7 +62,7 @@ export default function DashboardSupervisorView({
           </div>
           <div className="text-right">
             <span className="text-sm font-medium text-gray-700">
-              Células Supervisionadas: <span className="text-blue-600 font-semibold">{safeSupervisedCells.length}</span>
+              Células Supervisionadas: <span className="text-blue-600 font-semibold">{Array.isArray(safeSupervisedCells) ? safeSupervisedCells.length : 0}</span>
             </span>
           </div>
         </div>
@@ -104,7 +104,7 @@ export default function DashboardSupervisorView({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {safeSupervisedCells.length > 0 ? (
+          {Array.isArray(safeSupervisedCells) && safeSupervisedCells.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {safeSupervisedCells.map((cell) => (
                 <SupervisedCellCard
@@ -117,7 +117,7 @@ export default function DashboardSupervisorView({
                       ? cell.leaders.map(leader => leader.name).join(', ')
                       : undefined)
                   }
-                  memberCount={cell.member_count}
+                  memberCount={typeof cell.member_count === 'number' ? cell.member_count : 0}
                   onClick={handleCellClick}
                 />
               ))}
