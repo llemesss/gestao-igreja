@@ -4,16 +4,36 @@ import apiClient from './api';
 
 // Base da API: aceita backend Express (/api) e Netlify Functions (/.netlify/functions)
 function normalizeApiBase(url?: string) {
-  if (!url) return 'http://localhost:5000/api';
-  let u = url.trim();
-  u = u.replace(/\/+$/, '');
+  const DEFAULT_DEV = 'http://localhost:5000/api';
+  const DEFAULT_PROD = 'https://gestao-igreja-beckend.onrender.com/api';
+  const isBrowser = typeof window !== 'undefined';
+  const isProdEnv = isBrowser ? window.location.hostname.endsWith('onrender.com') : (process.env.NODE_ENV === 'production');
+
+  if (!url) return isProdEnv ? DEFAULT_PROD : DEFAULT_DEV;
+
+  let u = url.trim().replace(/\/+$/, '');
+
   if (u.includes('/.netlify/functions')) {
     return u;
   }
-  if (/\/api$/i.test(u)) {
-    return u.replace(/\/api$/i, '/api');
+
+  try {
+    const parsed = new URL(u);
+
+    if (parsed.pathname && /\/dashboard/i.test(parsed.pathname)) {
+      return `${parsed.origin}/api`;
+    }
+    if (/gestao-igreja-frontend\.onrender\.com$/i.test(parsed.hostname)) {
+      return DEFAULT_PROD;
+    }
+    if (/\/api$/i.test(parsed.pathname)) {
+      return `${parsed.origin}${parsed.pathname}`;
+    }
+    return `${parsed.origin}/api`;
+  } catch {
+    if (/\/api$/i.test(u)) return u;
+    return `${u}/api`;
   }
-  return `${u}/api`;
 }
 
 const API_URL = normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);

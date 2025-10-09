@@ -6,19 +6,45 @@ import { auth } from './auth';
 
 // Base da API: aceita backend Express (/api) e Netlify Functions (/.netlify/functions)
 function normalizeApiBase(url?: string) {
-  if (!url) return 'http://localhost:5000/api';
-  let u = url.trim();
-  // Remove barras no final
-  u = u.replace(/\/+$/, '');
-  // Se apontar para Netlify Functions, manter como está
+  const DEFAULT_DEV = 'http://localhost:5000/api';
+  const DEFAULT_PROD = 'https://gestao-igreja-beckend.onrender.com/api';
+  const isBrowser = typeof window !== 'undefined';
+  const isProdEnv = isBrowser ? window.location.hostname.endsWith('onrender.com') : (process.env.NODE_ENV === 'production');
+
+  // Fallback padrão
+  if (!url) return isProdEnv ? DEFAULT_PROD : DEFAULT_DEV;
+
+  let u = url.trim().replace(/\/+$/, '');
+
+  // Netlify Functions: manter como está
   if (u.includes('/.netlify/functions')) {
-    return u; // ex: https://site.netlify.app/.netlify/functions
+    return u;
   }
-  // Caso contrário, garantir sufixo /api
-  if (/\/api$/i.test(u)) {
-    return u.replace(/\/api$/i, '/api');
+
+  // Tentar parsear como URL para tratar path incorreto (ex.: "/dashboard")
+  try {
+    const parsed = new URL(u);
+
+    // Se apontar para o frontend com caminho "/dashboard", corrigir para origem + /api
+    if (parsed.pathname && /\/dashboard/i.test(parsed.pathname)) {
+      return `${parsed.origin}/api`;
+    }
+
+    // Se estiver apontando para o host do frontend, usar fallback do backend em produção
+    if (/gestao-igreja-frontend\.onrender\.com$/i.test(parsed.hostname)) {
+      return DEFAULT_PROD;
+    }
+
+    // Garantir sufixo /api
+    if (/\/api$/i.test(parsed.pathname)) {
+      return `${parsed.origin}${parsed.pathname}`;
+    }
+    return `${parsed.origin}/api`;
+  } catch {
+    // String simples: garantir sufixo /api
+    if (/\/api$/i.test(u)) return u;
+    return `${u}/api`;
   }
-  return `${u}/api`;
 }
 
 const API_URL = normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);
