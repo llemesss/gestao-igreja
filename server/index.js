@@ -144,6 +144,51 @@ const ensureSchema = async () => {
         CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
       `);
 
+      // Garantir tabela de células básica (usada em múltiplas rotas)
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS cells (
+          id UUID PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          supervisor_id UUID,
+          secretary_id UUID,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_cells_supervisor ON cells(supervisor_id);
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_cells_secretary ON cells(secretary_id);
+      `);
+
+      // Garantir tabela de líderes da célula compatível com inserções (created_at)
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS cell_leaders (
+          cell_id UUID NOT NULL,
+          user_id UUID NOT NULL,
+          PRIMARY KEY (cell_id, user_id)
+        );
+      `);
+      // Adicionar coluna created_at se estiver ausente
+      await pool.query(`
+        DO $$ BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'cell_leaders' AND column_name = 'created_at'
+          ) THEN
+            ALTER TABLE cell_leaders ADD COLUMN created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+          END IF;
+        END $$;
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_cell_leaders_cell ON cell_leaders(cell_id);
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_cell_leaders_user ON cell_leaders(user_id);
+      `);
+
       // Tabela de log de orações diárias (somente quando não estiver em PgBouncer)
       await pool.query(`
         CREATE TABLE IF NOT EXISTS daily_prayer_log (
