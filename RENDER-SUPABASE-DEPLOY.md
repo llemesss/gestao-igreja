@@ -16,13 +16,26 @@ This guide explains how to deploy the backend on Render (Express) and use Supaba
    - `DATABASE_URL`: Supabase Postgres connection string.
    - `JWT_SECRET`: any secure string.
    - `JWT_EXPIRES_IN`: e.g. `7d`.
-   - `CORS_ORIGIN`: your client origin (e.g. `https://your-client.onrender.com`).
+   - `CORS_ORIGIN`: your client origin(s), comma‑separated if multiple (e.g. `https://your-client.onrender.com,https://your-admin.onrender.com`).
+
+   Notes:
+   - Prefer the URL with `?sslmode=require` (SSL enabled). Example:
+     `postgresql://postgres:<password>@<host>:5432/postgres?sslmode=require`
+   - If hitting connection limits, use Supabase Connection Pooling (PgBouncer) on port `6543`:
+     `postgresql://postgres:<password>@<host>:6543/postgres?sslmode=require`
+   - The server binds to `process.env.PORT` (Render defaults to `10000`). No need to set it manually.
 
 After deploy, your API base will be `https://<service-name>.onrender.com/api`.
 
 ## Database (Supabase)
 
 Use Supabase Project → Settings → Database to obtain the `DATABASE_URL`. Make sure your schema tables exist (`users`, `cells`, `daily_prayer_log`, etc.).
+
+If you see `ECONNREFUSED` in Render logs:
+- Confirm `DATABASE_URL` is set and correct (host, port, db name, password).
+- Ensure `sslmode=require` is present.
+- Consider switching to Connection Pooling (`6543`).
+- Supabase has no IP allowlist by default; if using another provider, allow outbound traffic from Render.
 
 ## Frontend (Next.js)
 
@@ -47,6 +60,7 @@ The client automatically uses this base URL via `src/lib/api.ts`.
 
 - Authentication uses JWT signed by the backend. Tokens are saved and sent via the client axios instance.
 - CORS is enabled with `CORS_ORIGIN`. Adjust as needed.
+- Health endpoints: `GET /` returns a JSON with `ok: true`; `GET /api/health` pings the database and reports status.
 - If you plan to migrate to Supabase Auth later, we can adapt the server to verify Supabase JWTs and move registration to Supabase.
 
 ## Optional: render.yaml
