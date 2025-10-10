@@ -26,7 +26,12 @@ export default function DashboardSupervisorView({
 }: DashboardSupervisorViewProps) {
   const router = useRouter();
 
-  const safeSupervisedCells = Array.isArray(supervisedCells) ? supervisedCells : [];
+  // Estado robusto para listas (exemplo futuro, se adicionar mais listas)
+  // const [cells, setCells] = useState<Cell[]>([]);
+  // const [members, setMembers] = useState<User[]>([]);
+
+  // Garante que supervisedCells é sempre array
+  const safeSupervisedCells: Cell[] = Array.isArray(supervisedCells) ? supervisedCells : [];
 
   const handleRegisterPrayer = async () => {
     try {
