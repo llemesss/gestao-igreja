@@ -66,7 +66,11 @@ export const CreateEditCellModal: React.FC<CreateEditCellModalProps> = ({
 
     if (cell) {
       setName(cell.name);
-      setSelectedLeaderIds(cell.leaders.map(leader => leader.id));
+      // Garantir segurança caso leaders não venha do backend
+      const initialLeaderIds = Array.isArray(cell.leaders)
+        ? cell.leaders.map(leader => leader.id)
+        : [];
+      setSelectedLeaderIds(initialLeaderIds);
       setSelectedSecretaryId(cell.secretary_id || '');
       loadCellMembers(cell.id);
     } else {
@@ -122,10 +126,10 @@ export const CreateEditCellModal: React.FC<CreateEditCellModalProps> = ({
             Líderes da Célula
           </label>
           <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-2">
-            {leaders.length === 0 ? (
+            {(!Array.isArray(leaders) || leaders.length === 0) ? (
               <p className="text-gray-500 text-sm">Nenhum líder disponível</p>
             ) : (
-              leaders.map((leader) => (
+              (Array.isArray(leaders) ? leaders : []).map((leader) => (
                 <label key={leader.id} className="flex items-center space-x-2 py-1 cursor-pointer hover:bg-gray-50 rounded px-2">
                   <input
                     type="checkbox"
