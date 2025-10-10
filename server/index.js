@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import pg from 'pg';
+import { lookup } from 'dns/promises';
 
 const { Pool } = pg;
 
@@ -21,15 +22,44 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 const DATABASE_URL = process.env.DATABASE_URL;
 
-// DB pool (Supabase Postgres)
-const pool = new Pool({
-  connectionString: DATABASE_URL,
-  ssl: { require: true, rejectUnauthorized: false },
-  keepAlive: true,
-  connectionTimeoutMillis: 10000,
-  idleTimeoutMillis: 30000,
-  max: 10,
-});
+// DB pool (Supabase Postgres) com preferência por IPv4
+let pool;
+try {
+  if (!DATABASE_URL) {
+    throw new Error('DATABASE_URL ausente');
+  }
+  const url = new URL(DATABASE_URL);
+  // Resolver hostname para IPv4 explicitamente para evitar ENETUNREACH por IPv6
+  const resolved = await lookup(url.hostname, { family: 4 });
+  const hostIPv4 = resolved?.address || url.hostname;
+  const port = parseInt(url.port || (url.pathname ? '5432' : '5432'), 10);
+  const database = (url.pathname || '').replace(/^\//, '') || undefined;
+  const user = decodeURIComponent(url.username || '');
+  const password = decodeURIComponent(url.password || '');
+  pool = new Pool({
+    host: hostIPv4,
+    port,
+    database,
+    user,
+    password,
+    ssl: { require: true, rejectUnauthorized: false },
+    keepAlive: true,
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000,
+    max: 10,
+  });
+  console.log('[DB] Pool inicializado com IPv4', { host: hostIPv4, port });
+} catch (e) {
+  console.warn('[DB] Falha ao resolver IPv4; usando connectionString padrão:', e?.message || e);
+  pool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: { require: true, rejectUnauthorized: false },
+    keepAlive: true,
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000,
+    max: 10,
+  });
+}
 
 // App
 const app = express();
