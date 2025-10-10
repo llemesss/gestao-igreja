@@ -127,9 +127,11 @@ function MeuPerfilView() {
         closeButton: true,
         pauseOnHover: true,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao salvar perfil:', error);
-      toast.error('Erro ao salvar perfil', {
+      // Tenta extrair mensagem específica do backend
+      const backendMsg = error?.response?.data?.error || error?.message || 'Erro ao salvar perfil';
+      toast.error(backendMsg, {
         position: 'top-center',
       });
     } finally {
