@@ -42,7 +42,13 @@ interface DashboardHomeViewProps {
 }
 
 export default function DashboardHomeView({ user, prayerStats, cells = [], userCell }: DashboardHomeViewProps) {
-  if (!user) return null;
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-red-600 font-bold">Usuário não encontrado. Faça login novamente.</div>
+      </div>
+    );
+  }
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedCell, setSelectedCell] = useState<CellForModal | null>(null);
   const [leaders, setLeaders] = useState<Leader[]>([]);

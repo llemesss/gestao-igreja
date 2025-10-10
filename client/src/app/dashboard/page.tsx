@@ -135,11 +135,22 @@ export default function DashboardPage() {
     router.push('/usuarios');
   };
 
+
   if (loading) {
     return (
       <Layout title={getRoleGreeting()}>
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Layout title="Usuário não encontrado">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-red-600 font-bold">Usuário não encontrado. Faça login novamente.</div>
         </div>
       </Layout>
     );
