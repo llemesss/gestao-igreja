@@ -12,9 +12,9 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // IMPORTANTE: Só interceptar requisições GET para evitar problemas com POST/PUT/DELETE
-  if (event.request.method !== 'GET') {
-    return; // Deixa POST/PUT/DELETE seguirem sem SW
+  // GUARDA CRÍTICA: não interceptar nada que não seja GET
+  if (!event || !event.request || event.request.method !== 'GET') {
+    return;
   }
 
   // Para requisições GET, também evitar interceptar APIs críticas
