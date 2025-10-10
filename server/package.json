@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node --dns-result-order=ipv4first index.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
