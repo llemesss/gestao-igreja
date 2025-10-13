@@ -6,17 +6,18 @@ This guide explains how to deploy the backend on Render (Express) and use Supaba
 
 1. Ensure the `server/` directory exists with `package.json` and `index.js`.
 2. Push your repo to GitHub.
-3. Create a new Web Service on Render:
+3. Create a new Web Service on Render (backend):
    - Select your repository.
    - Root directory: `server`.
-   - Build Command: none (Node only)
-   - Start Command: `npm start`.
-   - Environment: Node 18+.
-4. Set environment variables on Render:
+   - Build Command: `npm install && npx prisma generate`
+   - Start Command: `npm start`
+   - Health Check Path: `/api/health`
+   - Environment: Node 18+ (ou 20)
+4. Set environment variables on Render (backend):
    - `DATABASE_URL`: Supabase Postgres connection string.
    - `JWT_SECRET`: any secure string.
    - `JWT_EXPIRES_IN`: e.g. `7d`.
-   - `CORS_ORIGIN`: your client origin(s), comma‑separated if multiple (e.g. `https://your-client.onrender.com,https://your-admin.onrender.com`).
+   - `CORS_ORIGIN`: your client origin(s), comma‑separated if multiple (e.g. `https://church-frontend.onrender.com`).
 
    Notes:
    - Prefer the URL with `?sslmode=require` (SSL enabled). Example:
@@ -25,7 +26,7 @@ This guide explains how to deploy the backend on Render (Express) and use Supaba
      `postgresql://postgres:<password>@<host>:6543/postgres?sslmode=require`
    - The server binds to `process.env.PORT` (Render defaults to `10000`). No need to set it manually.
 
-After deploy, your API base will be `https://<service-name>.onrender.com/api`.
+After deploy, your API base will be `https://church-backend.onrender.com/api` (ajuste conforme o nome do serviço).
 
 ## Database (Supabase)
 
@@ -46,12 +47,12 @@ Deploy the Next.js frontend on Render as a Web Service.
 - Start command: `npm start`
 - Environment: Node 18+
 
-Set `NEXT_PUBLIC_API_URL` pointing to your Render backend base. For local dev, you can keep `http://localhost:5000/api`.
+Set `NEXT_PUBLIC_API_URL` pointing to your Render backend base (ex.: `https://church-backend.onrender.com/api`). For local dev, keep `http://localhost:5000/api`.
 
 Example `.env.local` in `client/`:
 
 ```
-NEXT_PUBLIC_API_URL=https://your-service.onrender.com/api
+NEXT_PUBLIC_API_URL=https://church-backend.onrender.com/api
 ```
 
 The client automatically uses this base URL via `src/lib/api.ts`.
@@ -65,4 +66,9 @@ The client automatically uses this base URL via `src/lib/api.ts`.
 
 ## Optional: render.yaml
 
-You can commit the provided `render.yaml` at the repository root to define both services (frontend and backend) for one-click deploy on Render. Set environment variables in Render dashboard for the keys marked with `sync: false`.
+You can commit the provided `render.yaml` at the repository root to define both services (frontend and backend) for one-click deploy on Render. It already includes:
+
+- Backend service `church-backend` with `healthCheckPath: /api/health`.
+- Frontend service `church-frontend` with `NEXT_PUBLIC_API_URL` pointing to the backend.
+
+Set environment variables in Render dashboard for the keys marked with `sync: false`.

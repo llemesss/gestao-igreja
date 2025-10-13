@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import PDFDocument from 'pdfkit';
 import cors from 'cors';

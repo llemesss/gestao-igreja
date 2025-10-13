@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -31,6 +31,12 @@ export default function PerfilView() {
     address: ''
   });
 
+  // Evitar setState após desmontagem
+  const isMounted = useRef(true);
+  useEffect(() => {
+    return () => { isMounted.current = false; };
+  }, []);
+
   useEffect(() => {
     loadProfile();
   }, []);
@@ -42,6 +48,7 @@ export default function PerfilView() {
       if (user) {
         // Simular carregamento do perfil completo
         const response = await api.get(`/users/${user.id}`);
+        if (!isMounted.current) return;
         setProfile(response.data);
         setFormData({
           name: response.data.name || '',
@@ -54,6 +61,7 @@ export default function PerfilView() {
       // Fallback para dados do auth se a API falhar
       const user = auth.getUser();
       if (user) {
+        if (!isMounted.current) return;
         setProfile({
           id: user.id,
           name: user.name,
@@ -70,7 +78,9 @@ export default function PerfilView() {
         });
       }
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -86,20 +96,23 @@ export default function PerfilView() {
       });
       
       // Atualizar o perfil local
-      setProfile({
-        ...profile,
-        name: formData.name,
-        phone: formData.phone,
-        address: formData.address
-      });
-      
-      setEditing(false);
+      if (isMounted.current) {
+        setProfile({
+          ...profile,
+          name: formData.name,
+          phone: formData.phone,
+          address: formData.address
+        });
+        setEditing(false);
+      }
       alert('Perfil atualizado com sucesso!');
     } catch (error) {
       console.error('Erro ao salvar perfil:', error);
       alert('Erro ao salvar perfil. Tente novamente.');
     } finally {
-      setSaving(false);
+      if (isMounted.current) {
+        setSaving(false);
+      }
     }
   };
 

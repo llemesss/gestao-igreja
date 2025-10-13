@@ -6,6 +6,7 @@ services:
     plan: free
     buildCommand: npm install && npx prisma generate
     startCommand: npm start
+    healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: DATABASE_URL
@@ -15,7 +16,7 @@ services:
       - key: JWT_EXPIRES_IN
         value: 7d
       - key: CORS_ORIGIN
-        sync: false
+        value: https://church-frontend.onrender.com
 
   - type: web
     name: church-frontend
@@ -27,6 +28,6 @@ services:
     autoDeploy: true
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        sync: false
+        value: https://church-backend.onrender.com/api
       - key: NODE_VERSION
         value: 20

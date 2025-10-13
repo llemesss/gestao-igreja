@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { api } from '@/lib/api';
 
@@ -45,6 +44,12 @@ const estadosDoBrasil = [
 function MeuPerfilView() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Evitar setState após desmontagem
+  const isMounted = useRef(true);
+  useEffect(() => {
+    return () => { isMounted.current = false; };
+  }, []);
 
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<ProfileFormData>();
 
@@ -101,12 +106,16 @@ function MeuPerfilView() {
           oikos2: userData.oikos2 || '',
         };
 
-        reset(formData);
+        if (isMounted.current) {
+          reset(formData);
+        }
       } catch (error) {
         console.error('Erro ao carregar perfil:', error);
         toast.error('Erro ao carregar dados do perfil');
       } finally {
-        setIsLoading(false);
+        if (isMounted.current) {
+          setIsLoading(false);
+        }
       }
     }
 
@@ -135,7 +144,9 @@ function MeuPerfilView() {
         position: 'top-center',
       });
     } finally {
-      setIsSaving(false);
+      if (isMounted.current) {
+        setIsSaving(false);
+      }
     }
   }
 
@@ -149,7 +160,6 @@ function MeuPerfilView() {
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      <ToastContainer />
       <div className="bg-white rounded-lg shadow-md p-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Meu Perfil</h1>
         
