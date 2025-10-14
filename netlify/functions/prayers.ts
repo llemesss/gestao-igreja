@@ -179,6 +179,11 @@ export const handler: Handler = async (event, context) => {
       const statsResult = await pool.query(statsQuery, [userId]);
       const stats = statsResult.rows[0];
 
+      // DEBUG: Logar dados brutos de estatísticas pessoais imediatamente após a query
+      try {
+        console.log('DEBUG_DADOS_ORACAO_BRUTOS_SERVER_STATS:', stats);
+      } catch {}
+
       return {
         statusCode: 200,
         headers,
@@ -219,6 +224,15 @@ export const handler: Handler = async (event, context) => {
       `;
 
       const historyResult = await pool.query(historyQuery, [userId]);
+
+      // DEBUG: Logar primeiro item do histórico, se existir
+      try {
+        if (historyResult.rows && historyResult.rows.length > 0) {
+          console.log('DEBUG_DADOS_ORACAO_BRUTOS_SERVER_HISTORY_ITEM_0:', historyResult.rows[0]);
+        } else {
+          console.log('DEBUG_DADOS_ORACAO_BRUTOS_SERVER_HISTORY_VAZIO');
+        }
+      } catch {}
 
       // Verificar se orou hoje
       const today = new Date().toISOString().split('T')[0];

@@ -47,6 +47,12 @@ export function PrayerStatsModal({ isOpen, onClose, userId }: PrayerStatsModalPr
       // Se um userId for fornecido, use o endpoint específico que já retorna last_prayer_date
       if (userId) {
         const userData = await apiMethods.prayers.getUserStats(userId);
+        // DEBUG: Logar dados brutos retornados para identificar o campo de data
+        if (userData) {
+          // Tenta logar bloco principal de stats quando disponível
+          // Caso não exista, loga o objeto inteiro
+          console.log('DEBUG_DADOS_ORACAO_BRUTOS_CLIENT:', (userData as any).stats ?? userData);
+        }
         setStats(userData);
         return;
       }
@@ -56,6 +62,11 @@ export function PrayerStatsModal({ isOpen, onClose, userId }: PrayerStatsModalPr
         apiMethods.prayers.getStats(),
         apiMethods.prayers.getMyStats().catch(() => null),
       ]);
+
+      // DEBUG: Logar dados brutos retornados do endpoint pessoal
+      if (my) {
+        console.log('DEBUG_DADOS_ORACAO_BRUTOS_CLIENT:', (my as any).stats ?? my);
+      }
 
       const lastDate = my?.stats?.last_prayer_date ?? my?.last_prayer_date ?? null;
 
