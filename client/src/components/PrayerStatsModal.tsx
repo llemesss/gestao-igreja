@@ -44,13 +44,51 @@ export function PrayerStatsModal({ isOpen, onClose, userId }: PrayerStatsModalPr
   const loadStats = async () => {
     setLoading(true);
     try {
-      // Usa axios via apiMethods; interceptors cuidam do token
-      const data = userId
-        ? await apiMethods.prayers.getUserStats(userId)
-        : await apiMethods.prayers.getMyStats();
-      setStats(data);
+      // Padronizar para usar o mesmo endpoint do Dashboard
+      // /prayers/stats -> { prayersToday, prayersThisWeek, prayersThisMonth }
+      const data = await apiMethods.prayers.getStats();
+
+      // Normalizar para a estrutura esperada pelo modal
+      const normalized: PrayerStatsData = {
+        stats: {
+          total_prayers: Number(data?.prayersThisMonth) || 0,
+          recent_prayers: data?.prayersToday ? 1 : 0,
+          week_prayers: Number(data?.prayersThisWeek) || 0,
+          // Endpoints atuais não retornam datas; manter null
+          last_prayer_date: null,
+          first_prayer_date: null,
+          prayed_today: Boolean(data?.prayersToday),
+        },
+        // Usado para o card "Orações em {mês}"
+        prayers_this_month: Number(data?.prayersThisMonth) || 0,
+      };
+
+      setStats(normalized);
     } catch (error) {
       console.error('Erro ao carregar estatísticas (catch):', error);
+
+      // Fallback: tentar o endpoint legado /prayers/my-stats, caso exista
+      try {
+        const legacy = await apiMethods.prayers.getMyStats();
+        // Se o legado retornar apenas contagem, adaptar minimamente
+        if (legacy && (legacy.count !== undefined)) {
+          const normalizedLegacy: PrayerStatsData = {
+            stats: {
+              total_prayers: Number(legacy.count) || 0,
+              recent_prayers: 0,
+              week_prayers: 0,
+              last_prayer_date: null,
+              first_prayer_date: null,
+              prayed_today: false,
+            },
+          };
+          setStats(normalizedLegacy);
+        } else {
+          setStats(legacy);
+        }
+      } catch (err) {
+        console.error('Fallback falhou em /prayers/my-stats:', err);
+      }
     } finally {
       setLoading(false);
     }
