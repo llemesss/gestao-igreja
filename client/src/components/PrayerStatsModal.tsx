@@ -44,33 +44,40 @@ export function PrayerStatsModal({ isOpen, onClose, userId }: PrayerStatsModalPr
   const loadStats = async () => {
     setLoading(true);
     try {
-      // Padronizar para usar o mesmo endpoint do Dashboard
-      // /prayers/stats -> { prayersToday, prayersThisWeek, prayersThisMonth }
-      const data = await apiMethods.prayers.getStats();
+      // Se um userId for fornecido, use o endpoint específico que já retorna last_prayer_date
+      if (userId) {
+        const userData = await apiMethods.prayers.getUserStats(userId);
+        setStats(userData);
+        return;
+      }
 
-      // Normalizar para a estrutura esperada pelo modal
+      // Senão, use o mesmo endpoint do Dashboard e complemente com /my-stats para obter last_prayer_date
+      const [basic, my] = await Promise.all([
+        apiMethods.prayers.getStats(),
+        apiMethods.prayers.getMyStats().catch(() => null),
+      ]);
+
+      const lastDate = my?.stats?.last_prayer_date ?? my?.last_prayer_date ?? null;
+
       const normalized: PrayerStatsData = {
         stats: {
-          total_prayers: Number(data?.prayersThisMonth) || 0,
-          recent_prayers: data?.prayersToday ? 1 : 0,
-          week_prayers: Number(data?.prayersThisWeek) || 0,
-          // Endpoints atuais não retornam datas; manter null
-          last_prayer_date: null,
+          total_prayers: Number(basic?.prayersThisMonth) || 0,
+          recent_prayers: basic?.prayersToday ? 1 : 0,
+          week_prayers: Number(basic?.prayersThisWeek) || 0,
+          last_prayer_date: lastDate,
           first_prayer_date: null,
-          prayed_today: Boolean(data?.prayersToday),
+          prayed_today: Boolean(basic?.prayersToday),
         },
-        // Usado para o card "Orações em {mês}"
-        prayers_this_month: Number(data?.prayersThisMonth) || 0,
+        prayers_this_month: Number(basic?.prayersThisMonth) || 0,
       };
 
       setStats(normalized);
     } catch (error) {
       console.error('Erro ao carregar estatísticas (catch):', error);
 
-      // Fallback: tentar o endpoint legado /prayers/my-stats, caso exista
+      // Fallback: tentar somente /prayers/my-stats
       try {
         const legacy = await apiMethods.prayers.getMyStats();
-        // Se o legado retornar apenas contagem, adaptar minimamente
         if (legacy && (legacy.count !== undefined)) {
           const normalizedLegacy: PrayerStatsData = {
             stats: {
