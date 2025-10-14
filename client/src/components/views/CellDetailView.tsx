@@ -214,7 +214,7 @@ const CellDetailView: React.FC<CellDetailViewProps> = ({ cellId, onBack, onNavig
         </CardHeader>
         <CardContent>
           {Array.isArray(cellDetail.members) && cellDetail.members.length > 0 ? (
-            <div className="members-list-container space-y-3">
+            <div className="members-list-container grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
               {cellDetail.members.map(member => (
                 <MemberListItem key={member.id} member={member} />
               ))}

@@ -185,7 +185,7 @@ export function LiderCellView() {
         </CardHeader>
         <CardContent>
           {Array.isArray(members) && members.length > 0 ? (
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
               {(members || []).map(member => (
                 <MemberListItem key={member.id} member={member} />
               ))}

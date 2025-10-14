@@ -438,7 +438,7 @@ export default function CellDetailClient() {
                 <p className="text-gray-600">Nenhum membro encontrado</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
                 {filteredMembers.map((member) => (
                   <div key={member.id} className="border rounded-lg p-4 hover:bg-gray-50">
                     <div className="flex items-center justify-between">
