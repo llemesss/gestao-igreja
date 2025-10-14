@@ -201,7 +201,8 @@ const cellsApi = {
   },
 
   getMyCellMembers: async () => {
-    const response = await apiClient.get('/cells/my-cell/members');
+    // Usar alias com payload que inclui objetos aninhados de Oikós
+    const response = await apiClient.get('/info/my-cell/members');
     return response.data;
   },
 

@@ -207,11 +207,25 @@ export const handler: Handler = async (event, context) => {
          ORDER BY u.name ASC`,
         [cellId]
       );
-
+      // Padronizar payload com objetos aninhados para Oikós e manter compatibilidade
+      const rows = (result.rows || []).map((r: any) => {
+        const oikos1Name = r.oikos1 || null;
+        const oikos2Name = r.oikos2 || null;
+        return {
+          ...r,
+          // Novos nomes padronizados
+          oikos_relacao_1: oikos1Name ? { nome: oikos1Name } : null,
+          oikos_relacao_2: oikos2Name ? { nome: oikos2Name } : null,
+          // Compatibilidade com nomes anteriores
+          oikos_1: oikos1Name ? { nome: oikos1Name } : null,
+          oikos_2: oikos2Name ? { nome: oikos2Name } : null,
+        };
+      });
+      console.log('DADOS ENVIADOS PARA O FRONTEND:', rows);
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify(result.rows)
+        body: JSON.stringify(rows)
       };
     }
 
@@ -252,11 +266,25 @@ export const handler: Handler = async (event, context) => {
          ORDER BY u.name ASC`,
         [requestedCellId]
       );
-
+      // Padronizar payload com objetos aninhados para Oikós e manter compatibilidade
+      const rows = (result.rows || []).map((r: any) => {
+        const oikos1Name = r.oikos1 || null;
+        const oikos2Name = r.oikos2 || null;
+        return {
+          ...r,
+          // Novos nomes padronizados
+          oikos_relacao_1: oikos1Name ? { nome: oikos1Name } : null,
+          oikos_relacao_2: oikos2Name ? { nome: oikos2Name } : null,
+          // Compatibilidade com nomes anteriores
+          oikos_1: oikos1Name ? { nome: oikos1Name } : null,
+          oikos_2: oikos2Name ? { nome: oikos2Name } : null,
+        };
+      });
+      console.log('DADOS ENVIADOS PARA O FRONTEND:', rows);
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify(result.rows)
+        body: JSON.stringify(rows)
       };
     }
 

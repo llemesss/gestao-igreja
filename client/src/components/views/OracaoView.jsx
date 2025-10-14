@@ -19,6 +19,7 @@ export function OracaoView() {
     async function fetchMembros() {
       try {
         const data = await apiMethods.cells.getMyCellMembers();
+        console.log('DADOS RECEBIDOS PELO FRONTEND:', data);
         setMembros(data);
       } catch (error) {
         console.error("Erro ao buscar membros da célula:", error);
@@ -62,18 +63,40 @@ export function OracaoView() {
       {/* Bloco 1: Membros da Célula e Oikós */}
       <section>
         <h3 style={{ color: '#374151' }}>Membros da sua Célula</h3>
-        <ul className="space-y-2">
-          {membros.map(membro => (
-            <li key={membro.id} className="bg-white text-gray-700 p-3 rounded-lg border border-gray-200">
-              <strong>{membro.name}</strong>
-              {membro.oikos && membro.oikos.length > 0 && (
-                <small style={{ marginLeft: '10px' }}>
-                  (Oikós: {membro.oikos.map(o => o.name).join(', ')})
-                </small>
-              )}
-            </li>
+        <div className="space-y-3">
+          {membros.map((membro) => (
+            <div key={membro.id} className="bg-white text-gray-700 p-4 rounded-lg border border-gray-200 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-semibold">
+                  {membro.name?.charAt(0)?.toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <strong className="truncate">{membro.name}</strong>
+                  </div>
+                  <div className="mt-1 text-sm text-gray-600">
+                    {(membro?.oikos_relacao_1?.nome || membro?.oikos_1?.nome || membro?.oikos1 || membro?.oikos_relacao_2?.nome || membro?.oikos_2?.nome || membro?.oikos2) ? (
+                      <div className="flex flex-wrap gap-x-3 gap-y-1">
+                        {(membro.oikos_relacao_1?.nome || membro.oikos_1?.nome || membro.oikos1) && (
+                          <span>
+                            <span className="font-medium">Oikós 1:</span> {membro.oikos_relacao_1?.nome || membro.oikos_1?.nome || membro.oikos1}
+                          </span>
+                        )}
+                        {(membro.oikos_relacao_2?.nome || membro.oikos_2?.nome || membro.oikos2) && (
+                          <span>
+                            <span className="font-medium">Oikós 2:</span> {membro.oikos_relacao_2?.nome || membro.oikos_2?.nome || membro.oikos2}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-gray-500 italic">Oikós não definidos</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           ))}
-        </ul>
+        </div>
       </section>
 
       <hr />

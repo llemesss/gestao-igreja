@@ -13,6 +13,12 @@ interface Member {
   phone?: string;
   whatsapp?: string;
   full_name?: string;
+  oikos1?: string;
+  oikos2?: string;
+  oikos_relacao_1?: { nome?: string } | null;
+  oikos_relacao_2?: { nome?: string } | null;
+  oikos_1?: { nome?: string } | null;
+  oikos_2?: { nome?: string } | null;
 }
 
 interface PrayerForMemberModalProps {
@@ -38,6 +44,7 @@ export default function PrayerForMemberModal({ isOpen, onClose }: PrayerForMembe
     setLoading(true);
     try {
       const data = await apiMethods.cells.getMyCellMembers();
+      console.log('DADOS RECEBIDOS PELO FRONTEND:', data);
       setMembers(data);
     } catch (error) {
       console.error('Erro ao carregar membros:', error);
@@ -132,6 +139,17 @@ export default function PrayerForMemberModal({ isOpen, onClose }: PrayerForMembe
                   <div className="flex-1">
                     <h4 className="font-semibold text-gray-800">{member.name}</h4>
                     <p className="text-sm text-gray-600">{member.email}</p>
+                    <div className="text-xs text-gray-600 space-y-1 mt-1">
+                      {(member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1) && (
+                        <p><span className="font-medium">Oikós 1:</span> {member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1}</p>
+                      )}
+                      {(member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2) && (
+                        <p><span className="font-medium">Oikós 2:</span> {member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2}</p>
+                      )}
+                      {!(member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1 || member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2) && (
+                        <p className="text-gray-500 italic">Oikós não definidos</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

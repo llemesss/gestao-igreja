@@ -22,6 +22,10 @@ interface Member {
   cell_name?: string;
   oikos1?: string;
   oikos2?: string;
+  oikos_relacao_1?: { nome?: string } | null;
+  oikos_relacao_2?: { nome?: string } | null;
+  oikos_1?: { nome?: string } | null;
+  oikos_2?: { nome?: string } | null;
 }
 
 interface CellDetail {
@@ -74,6 +78,7 @@ export default function CellDetailClient() {
     try {
       console.log('🔍 [DEBUG] Carregando membros para célula:', cellId);
       const data = await apiMethods.cells.getMembers(cellId);
+      console.log('DADOS RECEBIDOS PELO FRONTEND:', data);
       console.log('🔍 [DEBUG] Dados recebidos da API:', data);
       console.log('🔍 [DEBUG] Tipo dos dados:', typeof data);
       console.log('🔍 [DEBUG] É array?', Array.isArray(data));
@@ -475,13 +480,19 @@ export default function CellDetailClient() {
                                 <span>Célula: {member.cell_name}</span>
                               </div>
                             )}
-                            {(member.oikos1 || member.oikos2) && (
+                            {(
+                              (member.oikos_relacao_1 && member.oikos_relacao_1.nome) ||
+                              (member.oikos_relacao_2 && member.oikos_relacao_2.nome) ||
+                              (member.oikos_1 && member.oikos_1.nome) ||
+                              (member.oikos_2 && member.oikos_2.nome) ||
+                              member.oikos1 || member.oikos2
+                            ) && (
                               <div className="flex items-center space-x-2">
                                 <Users className="h-4 w-4" />
                                 <span>
-                                  {member.oikos1 && `Oikós 1: ${member.oikos1}`}
-                                  {member.oikos1 && member.oikos2 ? ' · ' : ''}
-                                  {member.oikos2 && `Oikós 2: ${member.oikos2}`}
+                                  {(member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1) && `Oikós 1: ${member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1}`}
+                                  {((member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1) && (member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2)) ? ' · ' : ''}
+                                  {(member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2) && `Oikós 2: ${member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2}`}
                                 </span>
                               </div>
                             )}

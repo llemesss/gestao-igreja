@@ -1335,7 +1335,22 @@ app.get('/api/cells/my-cell/members', verifyToken, async (req, res) => {
 
     console.log('[DEBUG] /api/cells/my-cell/members -> SQL (members):', sqlMembers, 'params:', [cellId]);
     const result = await pool.query(sqlMembers, [cellId]);
-    return res.json(result.rows);
+    // Padronizar payload com objetos aninhados para Oikós e manter compatibilidade
+    const rows = (result.rows || []).map((r) => {
+      const oikos1Name = r.oikos1 || null;
+      const oikos2Name = r.oikos2 || null;
+      return {
+        ...r,
+        // Novos nomes padronizados
+        oikos_relacao_1: oikos1Name ? { nome: oikos1Name } : null,
+        oikos_relacao_2: oikos2Name ? { nome: oikos2Name } : null,
+        // Compatibilidade com nomes anteriores
+        oikos_1: oikos1Name ? { nome: oikos1Name } : null,
+        oikos_2: oikos2Name ? { nome: oikos2Name } : null,
+      };
+    });
+    console.log('DADOS ENVIADOS PARA O FRONTEND:', rows);
+    return res.json(rows);
   } catch (error) {
     console.error('ERRO FATAL NA BUSCA DE MEMBROS (/api/cells/my-cell/members):', error?.message || error, error?.stack);
     return res.status(500).send({ message: 'Falha interna do servidor.' });
@@ -1347,12 +1362,6 @@ app.get('/api/info/my-cell/members', verifyToken, async (req, res) => {
   try {
     const { userId, role } = req.user;
     const sqlCell = 'SELECT cell_id FROM users WHERE id = $1';
-    const sqlMembers = `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
-              u.birth_date, u.gender, u.marital_status,
-              u.oikos1, u.oikos2, u.created_at
-       FROM users u
-       WHERE u.cell_id = $1
-       ORDER BY u.name ASC`;
 
     console.log('[DEBUG] /api/info/my-cell/members -> SQL (cell):', sqlCell, 'params:', [userId]);
     const userCellRes = await pool.query(sqlCell, [userId]);
@@ -1366,11 +1375,87 @@ app.get('/api/info/my-cell/members', verifyToken, async (req, res) => {
       return res.status(404).json({ error: 'Célula do usuário não encontrada' });
     }
 
+    // Detectar esquema de Oikós: tabela e possíveis colunas FK na tabela users
+    const sqlCheck = `
+      SELECT 
+        EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'oikos') AS has_oikos_table,
+        EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'oikos1_id') AS has_oikos1_id,
+        EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'oikos_1_id') AS has_oikos_1_id,
+        EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'oikos2_id') AS has_oikos2_id,
+        EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'oikos_2_id') AS has_oikos_2_id,
+        EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'oikos1') AS has_oikos1_text,
+        EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'oikos2') AS has_oikos2_text
+    `;
+    const checkRes = await pool.query(sqlCheck);
+    const check = checkRes.rows[0] || {};
+    const hasOikosTable = !!check.has_oikos_table;
+    let oikos1Fk = null;
+    let oikos2Fk = null;
+    if (hasOikosTable) {
+      if (check.has_oikos1_id) oikos1Fk = 'oikos1_id';
+      else if (check.has_oikos_1_id) oikos1Fk = 'oikos_1_id';
+      if (check.has_oikos2_id) oikos2Fk = 'oikos2_id';
+      else if (check.has_oikos_2_id) oikos2Fk = 'oikos_2_id';
+    }
+
+    let sqlMembers;
+    if (hasOikosTable && oikos1Fk && oikos2Fk) {
+      // JOIN completo com tabela de Oikós
+      sqlMembers = `
+        SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+               u.birth_date, u.gender, u.marital_status,
+               u.${oikos1Fk} AS oikos1_id, u.${oikos2Fk} AS oikos2_id,
+               o1.name AS oikos1_name, o2.name AS oikos2_name,
+               u.created_at
+        FROM users u
+        LEFT JOIN oikos o1 ON o1.id = u.${oikos1Fk}
+        LEFT JOIN oikos o2 ON o2.id = u.${oikos2Fk}
+        WHERE u.cell_id = $1
+        ORDER BY u.name ASC
+      `;
+      console.log('[DEBUG] /api/info/my-cell/members -> esquema Oikós detectado. Colunas FK:', { oikos1Fk, oikos2Fk });
+    } else {
+      // Fallback: usar colunas de texto users.oikos1, users.oikos2 (modelo atual)
+      sqlMembers = `
+        SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+               u.birth_date, u.gender, u.marital_status,
+               u.oikos1, u.oikos2,
+               u.created_at
+        FROM users u
+        WHERE u.cell_id = $1
+        ORDER BY u.name ASC
+      `;
+      console.log('[DEBUG] /api/info/my-cell/members -> usando fallback de colunas texto users.oikos1/users.oikos2');
+    }
+
     console.log('[DEBUG] /api/info/my-cell/members -> SQL (members):', sqlMembers, 'params:', [cellId]);
     const result = await pool.query(sqlMembers, [cellId]);
-    return res.json(result.rows);
+
+    // Ajuste do payload: incluir objetos aninhados oikos_1/oikos_2 com { nome }, mantendo compatibilidade
+    const rows = (result.rows || []).map((r) => {
+      const oikos1Name = r.oikos1_name || r.oikos1 || null;
+      const oikos2Name = r.oikos2_name || r.oikos2 || null;
+      return {
+        ...r,
+        // Novos nomes padronizados
+        oikos_relacao_1: oikos1Name ? { nome: oikos1Name } : null,
+        oikos_relacao_2: oikos2Name ? { nome: oikos2Name } : null,
+        // Compatibilidade com nomes anteriores
+        oikos_1: oikos1Name ? { nome: oikos1Name } : null,
+        oikos_2: oikos2Name ? { nome: oikos2Name } : null,
+      };
+    });
+
+    const membrosComOikos = rows;
+    console.log('DADOS ENVIADOS PARA O FRONTEND:', membrosComOikos);
+    return res.json(membrosComOikos);
   } catch (error) {
-    console.error('ERRO FATAL NA BUSCA DE MEMBROS (/api/info/my-cell/members):', error?.message || error, error?.stack);
+    console.error('[ERRO] /api/info/my-cell/members', {
+      message: error?.message || String(error),
+      code: error?.code,
+      detail: error?.detail,
+      stack: error?.stack,
+    });
     return res.status(500).send({ message: 'Falha interna do servidor.' });
   }
 });
@@ -1424,17 +1509,98 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
       return res.status(403).json({ error: 'Acesso negado: permitido apenas para membros, líderes ou supervisores da célula' });
     }
 
-    const result = await pool.query(
-      `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
-              u.birth_date, u.gender, u.marital_status,
-              u.oikos1, u.oikos2, u.created_at
-       FROM users u
-       WHERE u.cell_id = $1
-       ORDER BY u.name ASC`,
-      [requestedCellId]
-    );
+    // Detectar esquema de Oikós e escolher entre JOIN ou fallback
+    let hasOikosTable = false;
+    let oikos1Fk = null;
+    let oikos2Fk = null;
+    try {
+      const tableCheck = await pool.query(
+        `SELECT EXISTS (
+           SELECT 1 FROM information_schema.tables WHERE table_name = 'oikos'
+         ) AS has_oikos_table`
+      );
+      hasOikosTable = Boolean(tableCheck.rows[0]?.has_oikos_table);
+      const check = (
+        await pool.query(
+          `SELECT 
+             EXISTS (
+               SELECT 1 FROM information_schema.columns 
+               WHERE table_name = 'users' AND column_name = 'oikos1_id'
+             ) AS has_oikos1_id,
+             EXISTS (
+               SELECT 1 FROM information_schema.columns 
+               WHERE table_name = 'users' AND column_name = 'oikos_1_id'
+             ) AS has_oikos_1_id,
+             EXISTS (
+               SELECT 1 FROM information_schema.columns 
+               WHERE table_name = 'users' AND column_name = 'oikos2_id'
+             ) AS has_oikos2_id,
+             EXISTS (
+               SELECT 1 FROM information_schema.columns 
+               WHERE table_name = 'users' AND column_name = 'oikos_2_id'
+             ) AS has_oikos_2_id`
+        )
+      ).rows[0] || {};
+      if (hasOikosTable) {
+        if (check.has_oikos1_id) oikos1Fk = 'oikos1_id';
+        else if (check.has_oikos_1_id) oikos1Fk = 'oikos_1_id';
+        if (check.has_oikos2_id) oikos2Fk = 'oikos2_id';
+        else if (check.has_oikos_2_id) oikos2Fk = 'oikos_2_id';
+      }
+    } catch (e) {
+      console.warn('[DEBUG] Falha ao detectar esquema Oikós, usando fallback de colunas texto.', e?.message || e);
+      hasOikosTable = false;
+      oikos1Fk = null;
+      oikos2Fk = null;
+    }
 
-    return res.json(result.rows);
+    let sqlMembers;
+    if (hasOikosTable && oikos1Fk && oikos2Fk) {
+      sqlMembers = `
+        SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+               u.birth_date, u.gender, u.marital_status,
+               u.${oikos1Fk} AS oikos1_id, u.${oikos2Fk} AS oikos2_id,
+               o1.name AS oikos1_name, o2.name AS oikos2_name,
+               u.created_at
+        FROM users u
+        LEFT JOIN oikos o1 ON o1.id = u.${oikos1Fk}
+        LEFT JOIN oikos o2 ON o2.id = u.${oikos2Fk}
+        WHERE u.cell_id = $1
+        ORDER BY u.name ASC
+      `;
+      console.log('[DEBUG] /api/cells/:id/members -> esquema Oikós detectado. Colunas FK:', { oikos1Fk, oikos2Fk });
+    } else {
+      sqlMembers = `
+        SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+               u.birth_date, u.gender, u.marital_status,
+               u.oikos1, u.oikos2,
+               u.created_at
+        FROM users u
+        WHERE u.cell_id = $1
+        ORDER BY u.name ASC
+      `;
+      console.log('[DEBUG] /api/cells/:id/members -> usando fallback de colunas texto users.oikos1/users.oikos2');
+    }
+
+    console.log('[DEBUG] /api/cells/:id/members -> SQL (members):', sqlMembers, 'params:', [requestedCellId]);
+    const result = await pool.query(sqlMembers, [requestedCellId]);
+
+    // Padronizar payload com objetos aninhados para Oikós e manter compatibilidade
+    const rows = (result.rows || []).map((r) => {
+      const oikos1Name = r.oikos1_name || r.oikos1 || null;
+      const oikos2Name = r.oikos2_name || r.oikos2 || null;
+      return {
+        ...r,
+        // Novos nomes padronizados
+        oikos_relacao_1: oikos1Name ? { nome: oikos1Name } : null,
+        oikos_relacao_2: oikos2Name ? { nome: oikos2Name } : null,
+        // Compatibilidade com nomes anteriores
+        oikos_1: oikos1Name ? { nome: oikos1Name } : null,
+        oikos_2: oikos2Name ? { nome: oikos2Name } : null,
+      };
+    });
+    console.log('DADOS ENVIADOS PARA O FRONTEND:', rows);
+    return res.json(rows);
   } catch (err) {
     console.error('Erro em GET /api/cells/:id/members', err);
     return res.status(500).json({ error: 'Erro ao listar membros da célula' });

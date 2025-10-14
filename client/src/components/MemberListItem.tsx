@@ -17,6 +17,10 @@ interface Member {
   role?: string;
   oikos1?: string;
   oikos2?: string;
+  oikos_relacao_1?: { nome?: string } | null;
+  oikos_relacao_2?: { nome?: string } | null;
+  oikos_1?: { nome?: string } | null;
+  oikos_2?: { nome?: string } | null;
 }
 
 interface MemberListItemProps {
@@ -158,6 +162,30 @@ export const MemberListItem: React.FC<MemberListItemProps> = ({ member }) => {
                 </span>
               )}
             </div>
+            {/* Oikós names below the member name */}
+            {(
+              (member.oikos_relacao_1 && member.oikos_relacao_1.nome) ||
+              (member.oikos_relacao_2 && member.oikos_relacao_2.nome) ||
+              (member.oikos_1 && member.oikos_1.nome) ||
+              (member.oikos_2 && member.oikos_2.nome) ||
+              member.oikos1 || member.oikos2
+            ) && (
+              <div className="mt-1 text-sm text-gray-600">
+                {(member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1) && (
+                  <span>
+                    <span className="font-medium">Oikós 1:</span> {member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1}
+                  </span>
+                )}
+                {((member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1) && (member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2)) && (
+                  <span className="mx-2">·</span>
+                )}
+                {(member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2) && (
+                  <span>
+                    <span className="font-medium">Oikós 2:</span> {member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2}
+                  </span>
+                )}
+              </div>
+            )}
             <div className="mt-1 flex flex-col sm:flex-row sm:gap-4 text-sm text-gray-500">
               {member.email && (
                 <div className="flex items-center gap-1">
@@ -169,16 +197,6 @@ export const MemberListItem: React.FC<MemberListItemProps> = ({ member }) => {
                 <div className="flex items-center gap-1">
                   <Phone className="h-3 w-3" />
                   <span>{member.phone}</span>
-                </div>
-              )}
-              {(member.oikos1 || member.oikos2) && (
-                <div className="flex items-center gap-1">
-                  <FileText className="h-3 w-3" />
-                  <span className="truncate">
-                    {member.oikos1 && `Oikós 1: ${member.oikos1}`}
-                    {member.oikos1 && member.oikos2 && ' · '}
-                    {member.oikos2 && `Oikós 2: ${member.oikos2}`}
-                  </span>
                 </div>
               )}
             </div>

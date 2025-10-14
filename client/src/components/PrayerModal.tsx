@@ -14,6 +14,10 @@ interface Member {
   full_name?: string;
   oikos1?: string;
   oikos2?: string;
+  oikos_relacao_1?: { nome?: string } | null;
+  oikos_relacao_2?: { nome?: string } | null;
+  oikos_1?: { nome?: string } | null;
+  oikos_2?: { nome?: string } | null;
 }
 
 interface PrayerModalProps {
@@ -37,6 +41,7 @@ export default function PrayerModal({ isOpen, onClose, onRegister }: PrayerModal
     setLoading(true);
     try {
       const cellMembers = await apiMethods.cells.getMyCellMembers();
+      console.log('DADOS RECEBIDOS PELO FRONTEND:', cellMembers);
       setMembers(cellMembers);
     } catch (error) {
       console.error('Erro ao carregar membros da célula:', error);
@@ -100,13 +105,13 @@ export default function PrayerModal({ isOpen, onClose, onRegister }: PrayerModal
                     <div className="flex-1">
                       <h4 className="font-semibold text-gray-800">{member.name}</h4>
                       <div className="text-sm text-gray-600 space-y-1 mt-1">
-                        {member.oikos1 && (
-                          <p><span className="font-medium">Oikós 1:</span> {member.oikos1}</p>
+                        {(member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1) && (
+                          <p><span className="font-medium">Oikós 1:</span> {member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1}</p>
                         )}
-                        {member.oikos2 && (
-                          <p><span className="font-medium">Oikós 2:</span> {member.oikos2}</p>
+                        {(member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2) && (
+                          <p><span className="font-medium">Oikós 2:</span> {member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2}</p>
                         )}
-                        {!member.oikos1 && !member.oikos2 && (
+                        {!(member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1 || member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2) && (
                           <p className="text-gray-500 italic">Oikós não definidos</p>
                         )}
                       </div>
