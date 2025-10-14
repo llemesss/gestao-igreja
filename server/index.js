@@ -1313,28 +1313,65 @@ app.post('/api/celula', verifyToken, createCellHandler);
 app.get('/api/cells/my-cell/members', verifyToken, async (req, res) => {
   try {
     const { userId, role } = req.user;
-    const userCellRes = await pool.query('SELECT cell_id FROM users WHERE id = $1', [userId]);
+    const sqlCell = 'SELECT cell_id FROM users WHERE id = $1';
+    const sqlMembers = `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+              u.birth_date, u.gender, u.marital_status,
+              u.oikos1, u.oikos2, u.created_at
+       FROM users u
+       WHERE u.cell_id = $1
+       ORDER BY u.name ASC`;
+
+    console.log('[DEBUG] /api/cells/my-cell/members -> SQL (cell):', sqlCell, 'params:', [userId]);
+    const userCellRes = await pool.query(sqlCell, [userId]);
     const cellId = userCellRes.rows[0]?.cell_id;
+    console.log('[DEBUG] /api/cells/my-cell/members -> cellId:', cellId);
+
     if (!cellId) {
-      // Admin e papéis de liderança não possuem necessariamente célula própria; retorne lista vazia
       if (['ADMIN', 'PASTOR', 'COORDENADOR', 'SUPERVISOR'].includes(role)) {
         return res.json([]);
       }
       return res.status(404).json({ error: 'Célula do usuário não encontrada' });
     }
-    const result = await pool.query(
-      `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+
+    console.log('[DEBUG] /api/cells/my-cell/members -> SQL (members):', sqlMembers, 'params:', [cellId]);
+    const result = await pool.query(sqlMembers, [cellId]);
+    return res.json(result.rows);
+  } catch (error) {
+    console.error('ERRO FATAL NA BUSCA DE MEMBROS (/api/cells/my-cell/members):', error?.message || error, error?.stack);
+    return res.status(500).send({ message: 'Falha interna do servidor.' });
+  }
+});
+
+// Alias solicitado pelo cliente: /api/info/my-cell/members (mapeia para a mesma lógica)
+app.get('/api/info/my-cell/members', verifyToken, async (req, res) => {
+  try {
+    const { userId, role } = req.user;
+    const sqlCell = 'SELECT cell_id FROM users WHERE id = $1';
+    const sqlMembers = `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
               u.birth_date, u.gender, u.marital_status,
               u.oikos1, u.oikos2, u.created_at
        FROM users u
        WHERE u.cell_id = $1
-       ORDER BY u.name ASC`,
-      [cellId]
-    );
+       ORDER BY u.name ASC`;
+
+    console.log('[DEBUG] /api/info/my-cell/members -> SQL (cell):', sqlCell, 'params:', [userId]);
+    const userCellRes = await pool.query(sqlCell, [userId]);
+    const cellId = userCellRes.rows[0]?.cell_id;
+    console.log('[DEBUG] /api/info/my-cell/members -> cellId:', cellId);
+
+    if (!cellId) {
+      if (['ADMIN', 'PASTOR', 'COORDENADOR', 'SUPERVISOR'].includes(role)) {
+        return res.json([]);
+      }
+      return res.status(404).json({ error: 'Célula do usuário não encontrada' });
+    }
+
+    console.log('[DEBUG] /api/info/my-cell/members -> SQL (members):', sqlMembers, 'params:', [cellId]);
+    const result = await pool.query(sqlMembers, [cellId]);
     return res.json(result.rows);
-  } catch (err) {
-    console.error('Erro em GET /api/cells/my-cell/members', err);
-    return res.status(500).json({ error: 'Erro ao listar membros' });
+  } catch (error) {
+    console.error('ERRO FATAL NA BUSCA DE MEMBROS (/api/info/my-cell/members):', error?.message || error, error?.stack);
+    return res.status(500).send({ message: 'Falha interna do servidor.' });
   }
 });
 
