@@ -15,6 +15,8 @@ interface Member {
   birth_date?: string;
   address?: string;
   role?: string;
+  oikos1?: string;
+  oikos2?: string;
 }
 
 interface MemberListItemProps {
@@ -145,32 +147,42 @@ export const MemberListItem: React.FC<MemberListItemProps> = ({ member }) => {
             <div className="bg-blue-100 p-2 rounded-full">
               <User className="h-4 w-4 text-blue-600" />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
-                <span className="member-name font-medium text-gray-900 truncate">
-                  {member.name}
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
+              <span className="member-name font-medium text-gray-900 truncate">
+                {member.name}
+              </span>
+              {member.role && (
+                <span className="member-role text-sm text-gray-600 capitalize">
+                  {member.role}
                 </span>
-                {member.role && (
-                  <span className="member-role text-sm text-gray-600 capitalize">
-                    {member.role}
-                  </span>
-                )}
-              </div>
-              <div className="mt-1 flex flex-col sm:flex-row sm:gap-4 text-sm text-gray-500">
-                {member.email && (
-                  <div className="flex items-center gap-1">
-                    <Mail className="h-3 w-3" />
-                    <span className="truncate">{member.email}</span>
-                  </div>
-                )}
-                {member.phone && (
-                  <div className="flex items-center gap-1">
-                    <Phone className="h-3 w-3" />
-                    <span>{member.phone}</span>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
+            <div className="mt-1 flex flex-col sm:flex-row sm:gap-4 text-sm text-gray-500">
+              {member.email && (
+                <div className="flex items-center gap-1">
+                  <Mail className="h-3 w-3" />
+                  <span className="truncate">{member.email}</span>
+                </div>
+              )}
+              {member.phone && (
+                <div className="flex items-center gap-1">
+                  <Phone className="h-3 w-3" />
+                  <span>{member.phone}</span>
+                </div>
+              )}
+              {(member.oikos1 || member.oikos2) && (
+                <div className="flex items-center gap-1">
+                  <FileText className="h-3 w-3" />
+                  <span className="truncate">
+                    {member.oikos1 && `Oikós 1: ${member.oikos1}`}
+                    {member.oikos1 && member.oikos2 && ' · '}
+                    {member.oikos2 && `Oikós 2: ${member.oikos2}`}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
           </div>
           
           <div className="member-actions flex gap-2 ml-4">

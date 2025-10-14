@@ -20,6 +20,8 @@ interface Member {
   last_prayer?: string;
   cell_id?: string;
   cell_name?: string;
+  oikos1?: string;
+  oikos2?: string;
 }
 
 interface CellDetail {
@@ -471,6 +473,16 @@ export default function CellDetailClient() {
                               <div className="flex items-center space-x-2">
                                 <Users className="h-4 w-4" />
                                 <span>Célula: {member.cell_name}</span>
+                              </div>
+                            )}
+                            {(member.oikos1 || member.oikos2) && (
+                              <div className="flex items-center space-x-2">
+                                <Users className="h-4 w-4" />
+                                <span>
+                                  {member.oikos1 && `Oikós 1: ${member.oikos1}`}
+                                  {member.oikos1 && member.oikos2 ? ' · ' : ''}
+                                  {member.oikos2 && `Oikós 2: ${member.oikos2}`}
+                                </span>
                               </div>
                             )}
                           </div>
