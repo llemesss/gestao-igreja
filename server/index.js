@@ -1683,6 +1683,19 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
       oikos2Fk = null;
     }
 
+    // Verificar presença da FK users.cell_id
+    try {
+      const fkCheck = await pool.query(
+        `SELECT EXISTS (
+           SELECT 1 FROM information_schema.columns 
+           WHERE table_name = 'users' AND column_name = 'cell_id'
+         ) AS has_cell_id`
+      );
+      console.log('[DEBUG] FK users.cell_id existe?', Boolean(fkCheck.rows[0]?.has_cell_id));
+    } catch (e) {
+      console.warn('[DEBUG] Falha ao verificar FK users.cell_id:', e?.message || e);
+    }
+
     let sqlMembers;
     if (hasOikosTable && oikos1Fk && oikos2Fk) {
       sqlMembers = `
@@ -1713,6 +1726,7 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
 
     console.log('[DEBUG] /api/cells/:id/members -> SQL (members):', sqlMembers, 'params:', [requestedCellId]);
     const result = await pool.query(sqlMembers, [requestedCellId]);
+    console.log('MEMBROS ENCONTRADOS PELA QUERY:', (result.rows || []).length, result.rows || []);
 
     // Padronizar payload com objetos aninhados para Oikós e manter compatibilidade
     const rows = (result.rows || []).map((r) => {
@@ -1734,6 +1748,13 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
     console.error('Erro em GET /api/cells/:id/members', err);
     return res.status(500).json({ error: 'Erro ao listar membros da célula' });
   }
+});
+
+// Alias PT-BR: /api/celulas/:celulaId/membros -> redireciona para /api/cells/:id/members
+app.get('/api/celulas/:celulaId/membros', verifyToken, async (req, res) => {
+  const celulaId = req.params.celulaId;
+  console.log('[DEBUG] /api/celulas/:celulaId/membros -> celulaId recebido da URL:', celulaId, 'é UUID válido?', isValidUuid(celulaId));
+  return res.redirect(307, `/api/cells/${celulaId}/members`);
 });
 
 // Cells: adicionar membro à célula
