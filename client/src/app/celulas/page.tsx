@@ -403,7 +403,9 @@ export default function CelulasPage() {
     }
   };
 
-  const filteredCells = cells.filter(cell =>
+  // Salvaguarda: garantir que sempre operamos sobre um array
+  const safeCells = Array.isArray(cells) ? cells : [];
+  const filteredCells = safeCells.filter(cell =>
     cell.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (cell.supervisor_name && cell.supervisor_name.toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -513,12 +515,13 @@ export default function CelulasPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredCells.map((cell) => (
-                <div 
-                  key={cell.id} 
-                  className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
-                  onClick={() => handleNavigate(cell.id)}
-                >
+              {Array.isArray(filteredCells) && filteredCells.length > 0 ? (
+                filteredCells.map((cell) => (
+                  <div 
+                    key={cell.id} 
+                    className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
+                    onClick={() => handleNavigate(cell.id)}
+                  >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-3 mb-2">
@@ -560,8 +563,8 @@ export default function CelulasPage() {
                     </div>
                   </div>
                 </div>
-              ))}
-              {filteredCells.length === 0 && (
+              ))
+              ) : (
                 <div className="text-center py-8">
                   <Home className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <p className="text-gray-600">Nenhuma célula encontrada</p>
