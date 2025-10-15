@@ -1455,14 +1455,8 @@ app.get('/api/cells/my-cell/members', verifyToken, async (req, res) => {
       }
       return res.status(404).json({ error: 'Célula do usuário não encontrada' });
     }
-    const sqlCell = 'SELECT cell_id FROM users WHERE id = $1';
-    const sqlMembers = `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
-              u.birth_date, u.gender, u.marital_status,
-              u.oikos1, u.oikos2, u.created_at
-       FROM users u
-       WHERE u.cell_id = $1
-       ORDER BY u.name ASC`;
 
+    const sqlCell = 'SELECT cell_id FROM users WHERE id = $1';
     console.log('[DEBUG] /api/cells/my-cell/members -> SQL (cell):', sqlCell, 'params:', [userId]);
     const userCellRes = await pool.query(sqlCell, [userId]);
     const cellId = userCellRes.rows[0]?.cell_id;
@@ -1475,15 +1469,110 @@ app.get('/api/cells/my-cell/members', verifyToken, async (req, res) => {
       return res.status(404).json({ error: 'Célula do usuário não encontrada' });
     }
 
+    // Tentar via Supabase SDK primeiro, se disponível (bypass RLS com Service Role)
+    if (supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('users')
+          .select('id,name,email,role,phone,whatsapp,birth_date,gender,marital_status,oikos1,oikos2,created_at')
+          .eq('cell_id', cellId)
+          .order('name', { ascending: true });
+        if (error) {
+          console.error('[Supabase] Falha na query de membros via SDK (my-cell):', error?.message || error);
+        } else if (Array.isArray(data)) {
+          console.log(`[Supabase] /api/cells/my-cell/members -> retornou ${data.length} registros via SDK`);
+          const rows = (data || []).map((r) => {
+            const oikos1Name = r.oikos1 || null;
+            const oikos2Name = r.oikos2 || null;
+            return {
+              ...r,
+              oikos_relacao_1: oikos1Name ? { nome: oikos1Name } : null,
+              oikos_relacao_2: oikos2Name ? { nome: oikos2Name } : null,
+              oikos_1: oikos1Name ? { nome: oikos1Name } : null,
+              oikos_2: oikos2Name ? { nome: oikos2Name } : null,
+            };
+          });
+          return res.json(rows);
+        }
+      } catch (sdkErr) {
+        console.error('[Supabase] Erro inesperado via SDK (my-cell):', sdkErr?.message || sdkErr);
+      }
+    }
+
+    // Detectar presença de tabela Oikós e FKs para construir consulta compatível
+    let hasOikosTable = false;
+    let oikos1Fk = null;
+    let oikos2Fk = null;
+    try {
+      const checkRes = await pool.query(`
+        SELECT 
+          EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'oikos') AS has_oikos,
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'oikos1_id') AS has_oikos1_id,
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'oikos_1_id') AS has_oikos_1_id,
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'oikos2_id') AS has_oikos2_id,
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'oikos_2_id') AS has_oikos_2_id
+      `);
+      const check = checkRes.rows[0] || {};
+      hasOikosTable = Boolean(check.has_oikos);
+      if (check.has_oikos1_id) oikos1Fk = 'oikos1_id';
+      else if (check.has_oikos_1_id) oikos1Fk = 'oikos_1_id';
+      if (check.has_oikos2_id) oikos2Fk = 'oikos2_id';
+      else if (check.has_oikos_2_id) oikos2Fk = 'oikos_2_id';
+    } catch (e) {
+      console.warn('[DEBUG] Falha ao detectar esquema Oikós (my-cell), usando fallback de colunas texto.', e?.message || e);
+      hasOikosTable = false;
+      oikos1Fk = null;
+      oikos2Fk = null;
+    }
+
+    // Verificar presença da FK users.cell_id
+    try {
+      const fkCheck = await pool.query(
+        `SELECT EXISTS (
+           SELECT 1 FROM information_schema.columns 
+           WHERE table_name = 'users' AND column_name = 'cell_id'
+         ) AS has_cell_id`
+      );
+      console.log('[DEBUG] FK users.cell_id existe? (my-cell)', Boolean(fkCheck.rows[0]?.has_cell_id));
+    } catch (e) {
+      console.warn('[DEBUG] Falha ao verificar FK users.cell_id (my-cell):', e?.message || e);
+    }
+
+    let sqlMembers;
+    if (hasOikosTable && oikos1Fk && oikos2Fk) {
+      sqlMembers = `
+        SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+               u.birth_date, u.gender, u.marital_status,
+               u.${oikos1Fk} AS oikos1_id, u.${oikos2Fk} AS oikos2_id,
+               o1.name AS oikos1_name, o2.name AS oikos2_name,
+               u.created_at
+        FROM users u
+        LEFT JOIN oikos o1 ON o1.id = u.${oikos1Fk}
+        LEFT JOIN oikos o2 ON o2.id = u.${oikos2Fk}
+        WHERE u."cell_id" = $1
+        ORDER BY u.name ASC
+      `;
+    } else {
+      sqlMembers = `
+        SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+               u.birth_date, u.gender, u.marital_status,
+               u.oikos1, u.oikos2,
+               u.created_at
+        FROM users u
+        WHERE u."cell_id" = $1
+        ORDER BY u.name ASC
+      `;
+    }
+
     console.log('[DEBUG] /api/cells/my-cell/members -> SQL (members):', sqlMembers, 'params:', [cellId]);
     const result = await pool.query(sqlMembers, [cellId]);
-    // Padronizar payload com objetos aninhados para Oikós e manter compatibilidade
     const rows = (result.rows || []).map((r) => {
-      const oikos1Name = r.oikos1 || null;
-      const oikos2Name = r.oikos2 || null;
+      // Mapear para payload padronizado
+      const oikos1Name = r.oikos1_name || r.oikos1 || null;
+      const oikos2Name = r.oikos2_name || r.oikos2 || null;
       return {
         ...r,
-        // Novos nomes padronizados
+        // Saídas padronizadas
         oikos_relacao_1: oikos1Name ? { nome: oikos1Name } : null,
         oikos_relacao_2: oikos2Name ? { nome: oikos2Name } : null,
         // Compatibilidade com nomes anteriores
@@ -1491,10 +1580,15 @@ app.get('/api/cells/my-cell/members', verifyToken, async (req, res) => {
         oikos_2: oikos2Name ? { nome: oikos2Name } : null,
       };
     });
-    console.log('DADOS ENVIADOS PARA O FRONTEND:', rows);
+    console.log('DADOS ENVIADOS PARA O FRONTEND (my-cell):', rows);
     return res.json(rows);
   } catch (error) {
-    console.error('ERRO FATAL NA BUSCA DE MEMBROS (/api/cells/my-cell/members):', error?.message || error, error?.stack);
+    console.error('ERRO FATAL NA BUSCA DE MEMBROS (/api/cells/my-cell/members):', {
+      message: error?.message,
+      code: error?.code,
+      detail: error?.detail,
+      stack: error?.stack,
+    });
     return res.status(500).send({ message: 'Falha interna do servidor.' });
   }
 });
