@@ -28,6 +28,11 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 const DATABASE_URL = process.env.DATABASE_URL;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Debug: confirmar leitura da Service Role Key sem expor seu valor
+console.log('SERVICE_KEY LENGTH:', SUPABASE_SERVICE_ROLE_KEY ? SUPABASE_SERVICE_ROLE_KEY.length : 'FALHOU');
+if (SUPABASE_SERVICE_ROLE_KEY && /^".*"$/.test(SUPABASE_SERVICE_ROLE_KEY)) {
+  console.warn('[Supabase] A Service Role Key parece estar entre aspas. Remova as aspas do valor no .env.');
+}
 
 // Supabase Client (Service Role) — usado para contornar RLS em consultas simples
 let supabaseClient = null;
@@ -1488,12 +1493,13 @@ app.get('/api/cells/my-cell/members', verifyToken, async (req, res) => {
 app.get('/api/info/my-cell/members', verifyToken, async (req, res) => {
   try {
     const { userId, role } = req.user;
+    // Validação que previne 500 quando userId está ausente
+    if (!userId) {
+      return res.status(401).send({ message: 'Autenticação inválida. ID de usuário ausente.' });
+    }
     if (!isValidUuid(userId)) {
       console.warn('[UUID] userId inválido em GET /api/info/my-cell/members', { userId });
-      if (['ADMIN', 'PASTOR', 'COORDENADOR', 'SUPERVISOR'].includes(role)) {
-        return res.json([]);
-      }
-      return res.status(404).json({ error: 'Célula do usuário não encontrada' });
+      return res.status(404).json({ message: 'Célula do usuário não encontrada.' });
     }
     // Tentar obter a célula do usuário via Supabase SDK primeiro
     let cellId = null;
@@ -1524,10 +1530,7 @@ app.get('/api/info/my-cell/members', verifyToken, async (req, res) => {
     console.log('[DEBUG] /api/info/my-cell/members -> cellId:', cellId);
 
     if (!cellId) {
-      if (['ADMIN', 'PASTOR', 'COORDENADOR', 'SUPERVISOR'].includes(role)) {
-        return res.json([]);
-      }
-      return res.status(404).json({ error: 'Célula do usuário não encontrada' });
+      return res.status(404).json({ message: 'Célula do usuário não encontrada.' });
     }
 
     // Detectar esquema de Oikós: tabela e possíveis colunas FK na tabela users
