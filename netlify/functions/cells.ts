@@ -66,6 +66,7 @@ export const handler: Handler = async (event, context) => {
     // GET / -> Listar células baseado no role
     if (path === '' && method === 'GET') {
       const { userId, role } = user;
+      console.log(`[NF][cells] GET / role=${role} userId=${userId}`);
       
       let query = '';
       let params: any[] = [];
@@ -143,7 +144,16 @@ export const handler: Handler = async (event, context) => {
           };
       }
 
-      const result = await pool.query(query, params);
+      console.log('[SQL][NF][cells] list', query.replace(/\s+/g, ' ').trim(), 'params=', params);
+      let result;
+      try {
+        result = await pool.query(query, params);
+      } catch (error: any) {
+        console.error('ERRO DETALHADO PG [NF cells list]:', error?.message, error?.code, error?.detail);
+        console.error(error?.stack);
+        throw error;
+      }
+      console.log(`[NF][cells] list rows=${(result.rows || []).length}`);
       
       return {
         statusCode: 200,
@@ -156,13 +166,28 @@ export const handler: Handler = async (event, context) => {
     if (path.match(/^\/[a-f0-9-]+$/) && method === 'GET') {
       const cellId = path.substring(1);
       
-      const result = await pool.query(`
+      console.log('[SQL][NF][cells] byId', `
         SELECT c.id, c.name, c.supervisor_id, c.created_at, c.updated_at,
                s.name as supervisor_name
         FROM cells c
         LEFT JOIN users s ON c.supervisor_id = s.id
         WHERE c.id = $1
-      `, [cellId]);
+      `.replace(/\s+/g, ' ').trim(), 'params=', [cellId]);
+      let result;
+      try {
+        result = await pool.query(
+          `SELECT c.id, c.name, c.supervisor_id, c.created_at, c.updated_at,
+                 s.name as supervisor_name
+           FROM cells c
+           LEFT JOIN users s ON c.supervisor_id = s.id
+           WHERE c.id = $1`,
+          [cellId]
+        );
+      } catch (error: any) {
+        console.error('ERRO DETALHADO PG [NF cells byId]:', error?.message, error?.code, error?.detail);
+        console.error(error?.stack);
+        throw error;
+      }
 
       if (result.rows.length === 0) {
         return {
@@ -182,11 +207,20 @@ export const handler: Handler = async (event, context) => {
     // GET /my-cell/members -> Obter membros da própria célula do usuário
     if (path === '/my-cell/members' && method === 'GET') {
       const { userId } = user;
+      console.log(`[NF][cells] GET /my-cell/members userId=${userId}`);
       // Buscar a célula do usuário autenticado
-      const userCellRes = await pool.query(
-        'SELECT cell_id FROM users WHERE id = $1',
-        [userId]
-      );
+      let userCellRes;
+      try {
+        console.log('[SQL][NF][cells] userCell', 'SELECT cell_id FROM users WHERE id = $1', 'params=', [userId]);
+        userCellRes = await pool.query(
+          'SELECT cell_id FROM users WHERE id = $1',
+          [userId]
+        );
+      } catch (error: any) {
+        console.error('ERRO DETALHADO PG [NF cells my-cell userCell]:', error?.message, error?.code, error?.detail);
+        console.error(error?.stack);
+        throw error;
+      }
 
       if (userCellRes.rows.length === 0 || !userCellRes.rows[0].cell_id) {
         return {
@@ -197,16 +231,30 @@ export const handler: Handler = async (event, context) => {
       }
 
       const cellId = userCellRes.rows[0].cell_id;
+      console.log(`[NF][cells] my-cell resolved cellId=${cellId}`);
 
-      const result = await pool.query(
-        `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+      let result;
+      try {
+        console.log('[SQL][NF][cells] membersByCell', `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
                 u.birth_date, u.gender, u.marital_status,
                 u.oikos1, u.oikos2, u.created_at
          FROM users u
          WHERE u.cell_id = $1
-         ORDER BY u.name ASC`,
-        [cellId]
-      );
+         ORDER BY u.name ASC`.replace(/\s+/g, ' ').trim(), 'params=', [cellId]);
+        result = await pool.query(
+          `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+                  u.birth_date, u.gender, u.marital_status,
+                  u.oikos1, u.oikos2, u.created_at
+           FROM users u
+           WHERE u.cell_id = $1
+           ORDER BY u.name ASC`,
+          [cellId]
+        );
+      } catch (error: any) {
+        console.error('ERRO DETALHADO PG [NF cells membersByCell]:', error?.message, error?.code, error?.detail);
+        console.error(error?.stack);
+        throw error;
+      }
       // Padronizar payload com objetos aninhados para Oikós e manter compatibilidade
       const rows = (result.rows || []).map((r: any) => {
         const oikos1Name = r.oikos1 || null;
@@ -234,19 +282,36 @@ export const handler: Handler = async (event, context) => {
     if (path.match(/^\/[a-f0-9-]+\/members$/) && method === 'GET') {
       const requestedCellId = path.split('/')[1];
       const { userId } = user;
+      console.log(`[NF][cells] GET /:id/members requestedCellId=${requestedCellId} userId=${userId}`);
 
       // Verificar se usuário é membro da célula
-      const userCellRes = await pool.query(
-        'SELECT cell_id FROM users WHERE id = $1',
-        [userId]
-      );
+      let userCellRes;
+      try {
+        console.log('[SQL][NF][cells] userCellForMembers', 'SELECT cell_id FROM users WHERE id = $1', 'params=', [userId]);
+        userCellRes = await pool.query(
+          'SELECT cell_id FROM users WHERE id = $1',
+          [userId]
+        );
+      } catch (error: any) {
+        console.error('ERRO DETALHADO PG [NF cells userCellForMembers]:', error?.message, error?.code, error?.detail);
+        console.error(error?.stack);
+        throw error;
+      }
       const userCellId = userCellRes.rows[0]?.cell_id;
 
       // Verificar se usuário é líder da célula
-      const leaderRes = await pool.query(
-        'SELECT 1 FROM cell_leaders WHERE user_id = $1 AND cell_id = $2 LIMIT 1',
-        [userId, requestedCellId]
-      );
+      let leaderRes;
+      try {
+        console.log('[SQL][NF][cells] leaderCheck', 'SELECT 1 FROM cell_leaders WHERE user_id = $1 AND cell_id = $2 LIMIT 1', 'params=', [userId, requestedCellId]);
+        leaderRes = await pool.query(
+          'SELECT 1 FROM cell_leaders WHERE user_id = $1 AND cell_id = $2 LIMIT 1',
+          [userId, requestedCellId]
+        );
+      } catch (error: any) {
+        console.error('ERRO DETALHADO PG [NF cells leaderCheck]:', error?.message, error?.code, error?.detail);
+        console.error(error?.stack);
+        throw error;
+      }
       const isLeaderOfCell = leaderRes.rows.length > 0;
 
       if (!isLeaderOfCell && userCellId !== requestedCellId) {
@@ -257,15 +322,28 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
-      const result = await pool.query(
-        `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+      let result;
+      try {
+        console.log('[SQL][NF][cells] membersOfRequestedCell', `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
                 u.birth_date, u.gender, u.marital_status,
                 u.oikos1, u.oikos2, u.created_at
          FROM users u
          WHERE u.cell_id = $1
-         ORDER BY u.name ASC`,
-        [requestedCellId]
-      );
+         ORDER BY u.name ASC`.replace(/\s+/g, ' ').trim(), 'params=', [requestedCellId]);
+        result = await pool.query(
+          `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+                  u.birth_date, u.gender, u.marital_status,
+                  u.oikos1, u.oikos2, u.created_at
+           FROM users u
+           WHERE u.cell_id = $1
+           ORDER BY u.name ASC`,
+          [requestedCellId]
+        );
+      } catch (error: any) {
+        console.error('ERRO DETALHADO PG [NF cells membersOfRequestedCell]:', error?.message, error?.code, error?.detail);
+        console.error(error?.stack);
+        throw error;
+      }
       // Padronizar payload com objetos aninhados para Oikós e manter compatibilidade
       const rows = (result.rows || []).map((r: any) => {
         const oikos1Name = r.oikos1 || null;

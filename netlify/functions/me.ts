@@ -66,6 +66,7 @@ export const handler: Handler = async (event, context) => {
     // GET / -> Obter dados do perfil do usuário logado
     if (path === '' && method === 'GET') {
       const { userId } = user;
+      console.log(`[NF][me] GET / userId=${userId}`);
 
       const query = `
         SELECT 
@@ -83,8 +84,15 @@ export const handler: Handler = async (event, context) => {
         LEFT JOIN cells c ON u.cell_id = c.id
         WHERE u.id = $1 AND u.status = 'ACTIVE'
       `;
-
-      const result = await pool.query(query, [userId]);
+      console.log('[SQL][NF][me] getProfile', query.replace(/\s+/g, ' ').trim(), 'params=', [userId]);
+      let result;
+      try {
+        result = await pool.query(query, [userId]);
+      } catch (error: any) {
+        console.error('ERRO DETALHADO PG [NF me getProfile]:', error?.message, error?.code, error?.detail);
+        console.error(error?.stack);
+        throw error;
+      }
 
       if (result.rows.length === 0) {
         return {
@@ -102,7 +110,15 @@ export const handler: Handler = async (event, context) => {
         FROM cells
         WHERE secretary_id = $1
       `;
-      const secretaryResult = await pool.query(secretaryQuery, [userId]);
+      console.log('[SQL][NF][me] secretaryCount', secretaryQuery.replace(/\s+/g, ' ').trim(), 'params=', [userId]);
+      let secretaryResult;
+      try {
+        secretaryResult = await pool.query(secretaryQuery, [userId]);
+      } catch (error: any) {
+        console.error('ERRO DETALHADO PG [NF me secretaryCount]:', error?.message, error?.code, error?.detail);
+        console.error(error?.stack);
+        throw error;
+      }
       const isCellSecretary = parseInt(secretaryResult.rows[0].count) > 0;
 
       // Remover password_hash da resposta
@@ -179,8 +195,14 @@ export const handler: Handler = async (event, context) => {
         SET ${updates.join(', ')}
         WHERE id = $${paramIndex}
       `;
-
-      await pool.query(query, params);
+      console.log('[SQL][NF][me] updateProfile', query.replace(/\s+/g, ' ').trim(), 'params=', params);
+      try {
+        await pool.query(query, params);
+      } catch (error: any) {
+        console.error('ERRO DETALHADO PG [NF me updateProfile]:', error?.message, error?.code, error?.detail);
+        console.error(error?.stack);
+        throw error;
+      }
 
       // Buscar dados atualizados
       const updatedUserQuery = `
@@ -198,8 +220,15 @@ export const handler: Handler = async (event, context) => {
         LEFT JOIN cells c ON u.cell_id = c.id
         WHERE u.id = $1
       `;
-
-      const updatedResult = await pool.query(updatedUserQuery, [userId]);
+      console.log('[SQL][NF][me] updatedProfile', updatedUserQuery.replace(/\s+/g, ' ').trim(), 'params=', [userId]);
+      let updatedResult;
+      try {
+        updatedResult = await pool.query(updatedUserQuery, [userId]);
+      } catch (error: any) {
+        console.error('ERRO DETALHADO PG [NF me updatedProfile]:', error?.message, error?.code, error?.detail);
+        console.error(error?.stack);
+        throw error;
+      }
       const updatedUser = updatedResult.rows[0];
 
       // Remover password_hash da resposta

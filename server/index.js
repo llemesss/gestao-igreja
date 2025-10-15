@@ -765,6 +765,7 @@ app.get('/api/users/:id/cell-assignments', verifyToken, async (req, res) => {
 app.get('/api/users/my-cells', verifyToken, async (req, res) => {
   try {
     const { userId, role } = req.user;
+    console.log(`[DEBUG] GET /api/users/my-cells userId=${userId} role=${role}`);
     if (role !== 'SUPERVISOR') {
       // Outros papéis não possuem "minhas células" específicas
       return res.json({ cells: [] });
@@ -776,10 +777,17 @@ app.get('/api/users/my-cells', verifyToken, async (req, res) => {
       WHERE c.supervisor_id = $1
       ORDER BY c.name ASC
     `;
+    console.log('[SQL] GET /api/users/my-cells', sql.replace(/\s+/g, ' ').trim(), 'params=', [userId]);
     const result = await pool.query(sql, [userId]);
+    console.log(`[DEBUG] GET /api/users/my-cells rows=${(result.rows || []).length}`);
     return res.json({ cells: result.rows });
   } catch (err) {
-    console.error('Erro em GET /api/users/my-cells', err);
+    console.error('Erro em GET /api/users/my-cells', {
+      message: err?.message,
+      stack: err?.stack,
+      code: err?.code,
+      detail: err?.detail,
+    });
     return res.status(500).json({ error: 'Erro interno ao listar minhas células' });
   }
 });
@@ -836,6 +844,7 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
 app.get('/api/me', verifyToken, async (req, res) => {
   try {
     const { userId } = req.user;
+    console.log(`[DEBUG] GET /api/me userId=${userId}`);
     const query = `
       SELECT u.id, u.name, u.email, u.role, u.cell_id,
              u.full_name, u.phone, u.whatsapp, u.gender,
@@ -850,17 +859,25 @@ app.get('/api/me', verifyToken, async (req, res) => {
       LEFT JOIN cells c ON u.cell_id = c.id
       WHERE u.id = $1
     `;
+    console.log('[SQL] GET /api/me', query.replace(/\s+/g, ' ').trim(), 'params=', [userId]);
     const result = await pool.query(query, [userId]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
     const { password_hash, ...cleanUserProfile } = result.rows[0];
     // Checar se é secretário
+    console.log('[SQL] GET /api/me secretary_count', 'SELECT COUNT(*) as count FROM cells WHERE secretary_id = $1', 'params=', [userId]);
     const secretaryRes = await pool.query('SELECT COUNT(*) as count FROM cells WHERE secretary_id = $1', [userId]);
+    console.log('[DEBUG] GET /api/me secretary_count result=', secretaryRes.rows?.[0]?.count);
     const isCellSecretary = parseInt(secretaryRes.rows[0].count) > 0;
     return res.json({ message: 'Perfil obtido com sucesso', user: { ...cleanUserProfile, isCellSecretary } });
   } catch (err) {
-    console.error('Erro em GET /api/me', err);
+    console.error('Erro em GET /api/me', {
+      message: err?.message,
+      stack: err?.stack,
+      code: err?.code,
+      detail: err?.detail,
+    });
     return res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
@@ -1050,6 +1067,7 @@ app.get('/api/prayers/my-stats', verifyToken, async (req, res) => {
 app.get('/api/cells', verifyToken, async (req, res) => {
   try {
     const { userId, role } = req.user;
+    console.log(`[DEBUG] GET /api/cells userId=${userId} role=${role}`);
     let query = '';
     let params = [];
 
@@ -1092,11 +1110,18 @@ app.get('/api/cells', verifyToken, async (req, res) => {
         return res.status(403).json({ error: 'Role não reconhecido' });
     }
 
+    console.log('[SQL] GET /api/cells', query.replace(/\s+/g, ' ').trim(), 'params=', params);
     const result = await pool.query(query, params);
+    console.log(`[DEBUG] GET /api/cells rows=${(result.rows || []).length}`);
     // Sempre retornar um array de células
     return res.json(result.rows || []);
   } catch (err) {
-    console.error('Erro em GET /api/cells', err);
+    console.error('Erro em GET /api/cells', {
+      message: err?.message,
+      stack: err?.stack,
+      code: err?.code,
+      detail: err?.detail,
+    });
     // Fallback amigável: evitar 500 e manter painel utilizável
     return res.status(200).json([]);
   }
