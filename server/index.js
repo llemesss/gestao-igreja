@@ -1586,6 +1586,7 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
   try {
     const { userId, role } = req.user;
     const requestedCellId = req.params.id;
+    console.log('[DEBUG] /api/cells/:id/members -> requestedCellId recebido da URL:', requestedCellId, 'é UUID válido?', isValidUuid(requestedCellId));
     if (!isValidUuid(requestedCellId)) {
       console.warn('[UUID] requestedCellId inválido em GET /api/cells/:id/members', { requestedCellId });
       return res.status(400).json({ error: 'ID de célula inválido' });
