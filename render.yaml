@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: church-backend
+    name: gestao-igreja-backend
     env: node
     rootDir: server
     plan: free
@@ -16,10 +16,10 @@ services:
       - key: JWT_EXPIRES_IN
         value: 7d
       - key: CORS_ORIGIN
-        value: https://church-frontend.onrender.com
+        value: https://gestao-igreja-frontend.onrender.com
 
   - type: web
-    name: church-frontend
+    name: gestao-igreja-frontend
     env: node
     rootDir: client
     plan: free
@@ -28,6 +28,6 @@ services:
     autoDeploy: true
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        value: https://church-backend.onrender.com/api
+        value: https://gestao-igreja-backend.onrender.com/api
       - key: NODE_VERSION
         value: 20

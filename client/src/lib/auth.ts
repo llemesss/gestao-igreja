@@ -5,7 +5,7 @@ import apiClient from './api';
 // Base da API: aceita backend Express (/api) e Netlify Functions (/.netlify/functions)
 function normalizeApiBase(url?: string) {
   const DEFAULT_DEV = 'http://localhost:5000/api';
-  const DEFAULT_PROD = 'https://church-backend.onrender.com/api';
+  const DEFAULT_PROD = 'https://gestao-igreja-backend.onrender.com/api';
   const isBrowser = typeof window !== 'undefined';
   const isProdEnv = isBrowser ? window.location.hostname.endsWith('onrender.com') : (process.env.NODE_ENV === 'production');
 
@@ -23,7 +23,7 @@ function normalizeApiBase(url?: string) {
     if (parsed.pathname && /\/dashboard/i.test(parsed.pathname)) {
       return `${parsed.origin}/api`;
     }
-    if (/church-frontend\.onrender\.com$/i.test(parsed.hostname)) {
+    if (/gestao-igreja-frontend\.onrender\.com$/i.test(parsed.hostname)) {
       return DEFAULT_PROD;
     }
     if (/\/api$/i.test(parsed.pathname)) {

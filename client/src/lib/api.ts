@@ -7,7 +7,7 @@ import { auth } from './auth';
 // Base da API: aceita backend Express (/api) e Netlify Functions (/.netlify/functions)
 function normalizeApiBase(url?: string) {
   const DEFAULT_DEV = 'http://localhost:5000/api';
-  const DEFAULT_PROD = 'https://church-backend.onrender.com/api';
+  const DEFAULT_PROD = 'https://gestao-igreja-backend.onrender.com/api';
   const isBrowser = typeof window !== 'undefined';
   const isProdEnv = isBrowser ? window.location.hostname.endsWith('onrender.com') : (process.env.NODE_ENV === 'production');
 
@@ -31,7 +31,7 @@ function normalizeApiBase(url?: string) {
     }
 
     // Se estiver apontando para o host do frontend, usar fallback do backend em produção
-    if (/church-frontend\.onrender\.com$/i.test(parsed.hostname)) {
+    if (/gestao-igreja-frontend\.onrender\.com$/i.test(parsed.hostname)) {
       return DEFAULT_PROD;
     }
 
@@ -117,6 +117,11 @@ const usersApi = {
 
   delete: async (id: string) => {
     const response = await apiClient.delete(`/users/${id}`);
+    return response.data;
+  },
+
+  getMyCell: async (): Promise<{ cell: { id: string; name: string; supervisor_id?: string; supervisor_name?: string } | null }> => {
+    const response = await apiClient.get('/user/my-cell');
     return response.data;
   },
 

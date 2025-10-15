@@ -792,6 +792,44 @@ app.get('/api/users/my-cells', verifyToken, async (req, res) => {
   }
 });
 
+// User: GET /api/user/my-cell -> célula associada ao usuário logado (via users.cell_id)
+app.get('/api/user/my-cell', verifyToken, async (req, res) => {
+  try {
+    const { userId, role } = req.user;
+    console.log(`[DEBUG] GET /api/user/my-cell userId=${userId} role=${role}`);
+
+    const sql = `
+      SELECT c.id, c.name, c.supervisor_id, sup.name AS supervisor_name
+      FROM users u
+      LEFT JOIN cells c ON c.id = u.cell_id
+      LEFT JOIN users sup ON sup.id = c.supervisor_id
+      WHERE u.id = $1
+      LIMIT 1
+    `;
+    console.log('[SQL] GET /api/user/my-cell', sql.replace(/\s+/g, ' ').trim(), 'params=', [userId]);
+    const result = await pool.query(sql, [userId]);
+    const cell = result.rows?.[0] || null;
+    console.log(`[DEBUG] GET /api/user/my-cell found=${!!cell} cellId=${cell?.id || null}`);
+
+    if (!cell) {
+      // Perfis de gestão podem não ter célula associada
+      if (['ADMIN', 'PASTOR', 'COORDENADOR', 'SUPERVISOR'].includes(role)) {
+        return res.status(200).json({ cell: null });
+      }
+      return res.status(404).json({ error: 'Célula do usuário não encontrada' });
+    }
+    return res.json({ cell });
+  } catch (err) {
+    console.error('Erro em GET /api/user/my-cell', {
+      message: err?.message,
+      stack: err?.stack,
+      code: err?.code,
+      detail: err?.detail,
+    });
+    return res.status(500).json({ error: 'Erro interno ao obter minha célula' });
+  }
+});
+
 // Users: PUT /:id -> atualizar dados do usuário e (opcional) atribuições de células
 app.put('/api/users/:id', verifyToken, async (req, res) => {
   try {
