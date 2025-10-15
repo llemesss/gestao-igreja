@@ -4,8 +4,6 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { useRouter } from 'next/navigation';
 import { PrayerStatusCard } from '@/components/PrayerStatusCard';
 import { Users } from 'lucide-react';
-import { apiMethods } from '@/lib/api';
-import CellCard from '@/components/CellCard';
 import SupervisedCellCard from '@/components/SupervisedCellCard';
 import { User, PrayerStats, Cell } from '@/types';
 
@@ -32,17 +30,6 @@ export default function DashboardSupervisorView({
 
   // Garante que supervisedCells é sempre array
   const safeSupervisedCells: Cell[] = Array.isArray(supervisedCells) ? supervisedCells : [];
-
-  const handleRegisterPrayer = async () => {
-    try {
-      await apiMethods.prayers.register();
-      // Recarregar a página para atualizar as estatísticas
-      window.location.reload();
-    } catch (error) {
-      console.error('Erro ao registrar oração:', error);
-      alert('Erro ao registrar oração');
-    }
-  };
 
   const handleCellClick = (cellId: string) => {
     if (onCellClick) {
@@ -139,35 +126,7 @@ export default function DashboardSupervisorView({
         </CardContent>
       </Card>
 
-      {/* Ações Rápidas */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Ações Rápidas</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-4">
-            <button 
-              onClick={handleRegisterPrayer}
-              disabled={(prayerStats?.recent_prayers || 0) > 0}
-              className={`p-4 border rounded-lg transition-colors text-left ${
-                (prayerStats?.recent_prayers || 0) > 0 
-                  ? 'border-gray-300 bg-gray-100 text-gray-500 cursor-not-allowed' 
-                  : 'border-gray-200 hover:bg-gray-50 text-gray-900'
-              }`}
-            >
-              <div className="text-sm font-medium">
-                {(prayerStats?.recent_prayers || 0) > 0 ? 'Oração Já Registrada Hoje' : 'Registrar Oração'}
-              </div>
-              <div className="text-xs text-gray-600 mt-1">
-                {(prayerStats?.recent_prayers || 0) > 0 
-                  ? 'Você já registrou sua oração hoje' 
-                  : 'Registre seu tempo de oração hoje'
-                }
-              </div>
-            </button>
-          </div>
-        </CardContent>
-      </Card>
+      
     </div>
   );
 }
