@@ -1585,8 +1585,13 @@ app.get('/api/info/my-cell/members', verifyToken, async (req, res) => {
 app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
   try {
     const { userId, role } = req.user;
-    const requestedCellId = req.params.id;
-    console.log('[DEBUG] /api/cells/:id/members -> requestedCellId recebido da URL:', requestedCellId, 'é UUID válido?', isValidUuid(requestedCellId));
+    const rawCellId = req.params.id;
+    const requestedCellId = typeof rawCellId === 'string' ? rawCellId.trim() : '';
+    console.log('[DEBUG] /api/cells/:id/members -> requestedCellId (raw):', rawCellId, 'type:', typeof rawCellId, 'trimmed:', requestedCellId, 'é UUID válido?', isValidUuid(requestedCellId));
+    if (!requestedCellId) {
+      console.error('ERRO: CELL ID ESTÁ FALTANDO NA REQUISIÇÃO.');
+      return res.status(400).json({ error: 'ID de célula ausente' });
+    }
     if (!isValidUuid(requestedCellId)) {
       console.warn('[UUID] requestedCellId inválido em GET /api/cells/:id/members', { requestedCellId });
       return res.status(400).json({ error: 'ID de célula inválido' });
@@ -1707,7 +1712,7 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
         FROM users u
         LEFT JOIN oikos o1 ON o1.id = u.${oikos1Fk}
         LEFT JOIN oikos o2 ON o2.id = u.${oikos2Fk}
-        WHERE u.cell_id = $1
+        WHERE u."cell_id" = $1
         ORDER BY u.name ASC
       `;
       console.log('[DEBUG] /api/cells/:id/members -> esquema Oikós detectado. Colunas FK:', { oikos1Fk, oikos2Fk });
@@ -1718,13 +1723,13 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
                u.oikos1, u.oikos2,
                u.created_at
         FROM users u
-        WHERE u.cell_id = $1
+        WHERE u."cell_id" = $1
         ORDER BY u.name ASC
       `;
       console.log('[DEBUG] /api/cells/:id/members -> usando fallback de colunas texto users.oikos1/users.oikos2');
     }
 
-    console.log('[DEBUG] /api/cells/:id/members -> SQL (members):', sqlMembers, 'params:', [requestedCellId]);
+    console.log('[DEBUG] /api/cells/:id/members -> SQL (members):', sqlMembers, 'params:', [requestedCellId], 'paramType:', typeof requestedCellId);
     const result = await pool.query(sqlMembers, [requestedCellId]);
     console.log('MEMBROS ENCONTRADOS PELA QUERY:', (result.rows || []).length, result.rows || []);
 
@@ -1752,8 +1757,13 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
 
 // Alias PT-BR: /api/celulas/:celulaId/membros -> redireciona para /api/cells/:id/members
 app.get('/api/celulas/:celulaId/membros', verifyToken, async (req, res) => {
-  const celulaId = req.params.celulaId;
-  console.log('[DEBUG] /api/celulas/:celulaId/membros -> celulaId recebido da URL:', celulaId, 'é UUID válido?', isValidUuid(celulaId));
+  const rawCelulaId = req.params.celulaId;
+  const celulaId = typeof rawCelulaId === 'string' ? rawCelulaId.trim() : '';
+  console.log('[DEBUG] /api/celulas/:celulaId/membros -> celulaId (raw):', rawCelulaId, 'type:', typeof rawCelulaId, 'trimmed:', celulaId, 'é UUID válido?', isValidUuid(celulaId));
+  if (!celulaId) {
+    console.error('ERRO: CELL ID ESTÁ FALTANDO NA REQUISIÇÃO (alias).');
+    return res.status(400).json({ error: 'ID de célula ausente' });
+  }
   return res.redirect(307, `/api/cells/${celulaId}/members`);
 });
 
