@@ -28,7 +28,7 @@ const PrayerCalendar: React.FC<PrayerCalendarProps> = ({ userId, year }) => {
       try {
         setLoading(true);
         const response = await api.get(`/users/${userId}/prayer-calendar?year=${year}`);
-        setPrayedDates(response.data);
+        setPrayedDates(Array.isArray(response.data) ? response.data : []);
         setError(null);
       } catch (err) {
         console.error('Erro ao buscar dados de oração:', err);

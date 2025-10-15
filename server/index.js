@@ -4,11 +4,14 @@ import PDFDocument from 'pdfkit';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4, validate as uuidValidate } from 'uuid';
 import pg from 'pg';
 import { lookup } from 'dns/promises';
 
 const { Pool } = pg;
+
+// Helper: validação segura de UUID para evitar erros de sintaxe no PostgreSQL
+const isValidUuid = (id) => typeof id === 'string' && uuidValidate(id);
 
 // Desativar verificação de certificado TLS para contornar erros
 // "self-signed certificate in certificate chain" ao conectar no Postgres
@@ -770,6 +773,10 @@ app.get('/api/users/my-cells', verifyToken, async (req, res) => {
       // Outros papéis não possuem "minhas células" específicas
       return res.json({ cells: [] });
     }
+    if (!isValidUuid(userId)) {
+      console.warn('[UUID] userId inválido em GET /api/users/my-cells', { userId });
+      return res.json({ cells: [] });
+    }
     const sql = `
       SELECT c.id, c.name, c.supervisor_id, u.name AS supervisor_name
       FROM cells c
@@ -797,6 +804,15 @@ app.get('/api/user/my-cell', verifyToken, async (req, res) => {
   try {
     const { userId, role } = req.user;
     console.log(`[DEBUG] GET /api/user/my-cell userId=${userId} role=${role}`);
+
+    if (!isValidUuid(userId)) {
+      console.warn('[UUID] userId inválido em GET /api/user/my-cell', { userId });
+      // Perfis de gestão podem não ter célula associada
+      if (['ADMIN', 'PASTOR', 'COORDENADOR', 'SUPERVISOR'].includes(role)) {
+        return res.status(200).json({ cell: null });
+      }
+      return res.status(404).json({ error: 'Célula do usuário não encontrada' });
+    }
 
     const sql = `
       SELECT c.id, c.name, c.supervisor_id, sup.name AS supervisor_name
@@ -992,6 +1008,11 @@ app.put('/api/me', verifyToken, async (req, res) => {
 app.post('/api/prayers/register', verifyToken, async (req, res) => {
   try {
     const { userId } = req.user;
+    if (!isValidUuid(userId)) {
+      console.warn('[UUID] userId inválido em POST /api/prayers/register', { userId });
+      // Fallback amigável: considera como sucesso sem tocar DB
+      return res.status(200).json({ message: 'Oração registrada', fallback: true });
+    }
     const today = new Date().toISOString().split('T')[0];
     const existing = await pool.query(
       'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2 LIMIT 1',
@@ -1015,6 +1036,10 @@ app.post('/api/prayers/register', verifyToken, async (req, res) => {
 app.get('/api/prayers/status-today', verifyToken, async (req, res) => {
   try {
     const { userId } = req.user;
+    if (!isValidUuid(userId)) {
+      console.warn('[UUID] userId inválido em GET /api/prayers/status-today', { userId });
+      return res.status(200).json({ hasPrayed: false, fallback: true });
+    }
     const today = new Date().toISOString().split('T')[0];
     const existing = await pool.query(
       'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2 LIMIT 1',
@@ -1032,6 +1057,15 @@ app.get('/api/prayers/status-today', verifyToken, async (req, res) => {
 app.get('/api/prayers/stats', verifyToken, async (req, res) => {
   try {
     const { userId } = req.user;
+    if (!isValidUuid(userId)) {
+      console.warn('[UUID] userId inválido em GET /api/prayers/stats', { userId });
+      return res.status(200).json({
+        prayersToday: false,
+        prayersThisWeek: 0,
+        prayersThisMonth: 0,
+        fallback: true,
+      });
+    }
     const statsQuery = `
       SELECT 
         COUNT(CASE WHEN prayer_date >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as "prayersThisWeek",
@@ -1063,6 +1097,11 @@ app.get('/api/prayers/stats', verifyToken, async (req, res) => {
 app.post('/api/prayers', verifyToken, async (req, res) => {
   try {
     const { userId } = req.user;
+    if (!isValidUuid(userId)) {
+      console.warn('[UUID] userId inválido em POST /api/prayers', { userId });
+      // Fallback amigável: considera como sucesso sem tocar DB
+      return res.status(200).json({ message: 'Oração registrada com sucesso!', fallback: true });
+    }
     const today = new Date().toISOString().split('T')[0];
     const exists = await pool.query(
       'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2',
@@ -1087,6 +1126,10 @@ app.get('/api/prayers/my-stats', verifyToken, async (req, res) => {
   try {
     const { userId } = req.user;
     const days = parseInt(req.query.days || '7');
+    if (!isValidUuid(userId)) {
+      console.warn('[UUID] userId inválido em GET /api/prayers/my-stats', { userId });
+      return res.status(200).json({ count: 0, days, fallback: true });
+    }
     const since = new Date(); since.setDate(since.getDate() - days);
     const countRes = await pool.query(
       `SELECT COUNT(*) as count FROM daily_prayer_log WHERE user_id = $1 AND prayer_date >= $2`,
@@ -1376,6 +1419,13 @@ app.post('/api/celula', verifyToken, createCellHandler);
 app.get('/api/cells/my-cell/members', verifyToken, async (req, res) => {
   try {
     const { userId, role } = req.user;
+    if (!isValidUuid(userId)) {
+      console.warn('[UUID] userId inválido em GET /api/cells/my-cell/members', { userId });
+      if (['ADMIN', 'PASTOR', 'COORDENADOR', 'SUPERVISOR'].includes(role)) {
+        return res.json([]);
+      }
+      return res.status(404).json({ error: 'Célula do usuário não encontrada' });
+    }
     const sqlCell = 'SELECT cell_id FROM users WHERE id = $1';
     const sqlMembers = `SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
               u.birth_date, u.gender, u.marital_status,
@@ -1424,6 +1474,13 @@ app.get('/api/cells/my-cell/members', verifyToken, async (req, res) => {
 app.get('/api/info/my-cell/members', verifyToken, async (req, res) => {
   try {
     const { userId, role } = req.user;
+    if (!isValidUuid(userId)) {
+      console.warn('[UUID] userId inválido em GET /api/info/my-cell/members', { userId });
+      if (['ADMIN', 'PASTOR', 'COORDENADOR', 'SUPERVISOR'].includes(role)) {
+        return res.json([]);
+      }
+      return res.status(404).json({ error: 'Célula do usuário não encontrada' });
+    }
     const sqlCell = 'SELECT cell_id FROM users WHERE id = $1';
 
     console.log('[DEBUG] /api/info/my-cell/members -> SQL (cell):', sqlCell, 'params:', [userId]);
@@ -1529,6 +1586,14 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
   try {
     const { userId, role } = req.user;
     const requestedCellId = req.params.id;
+    if (!isValidUuid(requestedCellId)) {
+      console.warn('[UUID] requestedCellId inválido em GET /api/cells/:id/members', { requestedCellId });
+      return res.status(400).json({ error: 'ID de célula inválido' });
+    }
+    if (!isValidUuid(userId)) {
+      console.warn('[UUID] userId inválido em GET /api/cells/:id/members', { userId });
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
 
     // Verificar se usuário é membro da célula solicitada
     const userCellRes = await pool.query('SELECT cell_id FROM users WHERE id = $1', [userId]);

@@ -20,7 +20,7 @@ export function OracaoView() {
       try {
         const data = await apiMethods.cells.getMyCellMembers();
         console.log('DADOS RECEBIDOS PELO FRONTEND:', data);
-        setMembros(data);
+        setMembros(Array.isArray(data) ? data : []);
       } catch (error) {
         console.error("Erro ao buscar membros da célula:", error);
         toast.error('Falha ao buscar membros da sua célula.');
