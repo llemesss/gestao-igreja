@@ -415,10 +415,17 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
+// Users: GET /my-cells -> células supervisionadas pelo usuário logado (SUPERVISOR)
+ 
+
 // Users: GET /:id perfil + estatísticas resumidas (similar à função users.ts)
 app.get('/api/users/:id', verifyToken, async (req, res) => {
   try {
     const targetUserId = req.params.id;
+    // Validação defensiva para evitar colisões com rotas estáticas e erro 22P02
+    if (!isValidUuid(targetUserId)) {
+      return res.status(404).json({ message: 'Usuário não encontrado' });
+    }
     // 1) Perfil do usuário ativo
     const userQuery = HAS_USERS_STATUS
       ? `SELECT id, name, email, phone, role, cell_id FROM users WHERE id = $1 AND status = 'ACTIVE'`
