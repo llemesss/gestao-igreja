@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4, validate as uuidValidate } from 'uuid';
 import pg from 'pg';
+import { createClient } from '@supabase/supabase-js';
 import { lookup } from 'dns/promises';
 
 const { Pool } = pg;
@@ -25,6 +26,19 @@ const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 const DATABASE_URL = process.env.DATABASE_URL;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// Supabase Client (Service Role) — usado para contornar RLS em consultas simples
+let supabaseClient = null;
+if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+  supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  console.log('[Supabase] Client inicializado com Service Role Key (backend).');
+} else {
+  console.warn('[Supabase] SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY ausentes; usando apenas conexão direta via pg.');
+}
 
 // DB pool (Supabase Postgres) com preferência por IPv4
 let pool;
@@ -1481,11 +1495,32 @@ app.get('/api/info/my-cell/members', verifyToken, async (req, res) => {
       }
       return res.status(404).json({ error: 'Célula do usuário não encontrada' });
     }
-    const sqlCell = 'SELECT cell_id FROM users WHERE id = $1';
-
-    console.log('[DEBUG] /api/info/my-cell/members -> SQL (cell):', sqlCell, 'params:', [userId]);
-    const userCellRes = await pool.query(sqlCell, [userId]);
-    const cellId = userCellRes.rows[0]?.cell_id;
+    // Tentar obter a célula do usuário via Supabase SDK primeiro
+    let cellId = null;
+    if (supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('users')
+          .select('cell_id')
+          .eq('id', userId)
+          .limit(1)
+          .maybeSingle();
+        if (error) {
+          console.error('[Supabase] Falha ao buscar cell_id via SDK:', error?.message || error);
+        } else {
+          cellId = data?.cell_id || null;
+          console.log('[Supabase] /api/info/my-cell/members -> cellId via SDK:', cellId);
+        }
+      } catch (sdkErr) {
+        console.error('[Supabase] Erro inesperado ao buscar cell_id via SDK:', sdkErr?.message || sdkErr);
+      }
+    }
+    if (!cellId) {
+      const sqlCell = 'SELECT cell_id FROM users WHERE id = $1';
+      console.log('[DEBUG] /api/info/my-cell/members -> SQL (cell):', sqlCell, 'params:', [userId]);
+      const userCellRes = await pool.query(sqlCell, [userId]);
+      cellId = userCellRes.rows[0]?.cell_id;
+    }
     console.log('[DEBUG] /api/info/my-cell/members -> cellId:', cellId);
 
     if (!cellId) {
@@ -1516,6 +1551,39 @@ app.get('/api/info/my-cell/members', verifyToken, async (req, res) => {
       else if (check.has_oikos_1_id) oikos1Fk = 'oikos_1_id';
       if (check.has_oikos2_id) oikos2Fk = 'oikos2_id';
       else if (check.has_oikos_2_id) oikos2Fk = 'oikos_2_id';
+    }
+
+    // Se Supabase Client estiver disponível, tentar via SDK primeiro para bypass RLS
+    if (supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('users')
+          .select('id,name,email,role,phone,whatsapp,birth_date,gender,marital_status,oikos1,oikos2,created_at')
+          .eq('cell_id', cellId)
+          .order('name', { ascending: true });
+        if (error) {
+          console.error('[Supabase] Falha na query de membros (my-cell) via SDK:', error?.message || error);
+        } else if (Array.isArray(data)) {
+          console.log(`[Supabase] /api/info/my-cell/members -> retornou ${data.length} registros via SDK`);
+          const rows = (data || []).map((r) => {
+            const oikos1Name = r.oikos1 || null;
+            const oikos2Name = r.oikos2 || null;
+            return {
+              ...r,
+              oikos_relacao_1: oikos1Name ? { nome: oikos1Name } : null,
+              oikos_relacao_2: oikos2Name ? { nome: oikos2Name } : null,
+              oikos_1: oikos1Name ? { nome: oikos1Name } : null,
+              oikos_2: oikos2Name ? { nome: oikos2Name } : null,
+            };
+          });
+          const membrosComOikos = rows;
+          console.log('DADOS ENVIADOS PARA O FRONTEND (SDK):', membrosComOikos);
+          return res.json(membrosComOikos);
+        }
+      } catch (sdkErr) {
+        console.error('[Supabase] Erro inesperado via SDK (my-cell):', sdkErr?.message || sdkErr);
+      }
+      // Em caso de erro ou SDK indisponível, cai para SQL abaixo
     }
 
     let sqlMembers;
@@ -1699,6 +1767,37 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
       console.log('[DEBUG] FK users.cell_id existe?', Boolean(fkCheck.rows[0]?.has_cell_id));
     } catch (e) {
       console.warn('[DEBUG] Falha ao verificar FK users.cell_id:', e?.message || e);
+    }
+
+    // Se Supabase Client estiver disponível, tentar via SDK primeiro (bypass RLS com Service Role)
+    if (supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('users')
+          .select('id,name,email,role,phone,whatsapp,birth_date,gender,marital_status,oikos1,oikos2,created_at')
+          .eq('cell_id', requestedCellId)
+          .order('name', { ascending: true });
+        if (error) {
+          console.error('[Supabase] Falha na query de membros via SDK:', error?.message || error);
+        } else if (Array.isArray(data)) {
+          console.log(`[Supabase] /api/cells/:id/members -> retornou ${data.length} registros via SDK`);
+          const rows = (data || []).map((r) => {
+            const oikos1Name = r.oikos1 || null;
+            const oikos2Name = r.oikos2 || null;
+            return {
+              ...r,
+              oikos_relacao_1: oikos1Name ? { nome: oikos1Name } : null,
+              oikos_relacao_2: oikos2Name ? { nome: oikos2Name } : null,
+              oikos_1: oikos1Name ? { nome: oikos1Name } : null,
+              oikos_2: oikos2Name ? { nome: oikos2Name } : null,
+            };
+          });
+          return res.json(rows);
+        }
+      } catch (sdkErr) {
+        console.error('[Supabase] Erro inesperado via SDK:', sdkErr?.message || sdkErr);
+      }
+      // Em caso de erro ou SDK indisponível, cai para SQL abaixo
     }
 
     let sqlMembers;
