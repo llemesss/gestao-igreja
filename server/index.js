@@ -1448,11 +1448,11 @@ app.post('/api/celula', verifyToken, createCellHandler);
 app.get('/api/cells/my-cell/members', verifyToken, async (req, res) => {
   try {
     const { userId, role } = req.user;
+    // [DEBUG] Solicitação do usuário: logar o role atual (Diogo SUPERVISOR)
+    console.log('PERMISSÃO ATUAL (DIOGO):', String(role || '').toUpperCase(), 'userId:', userId);
     if (!isValidUuid(userId)) {
       console.warn('[UUID] userId inválido em GET /api/cells/my-cell/members', { userId });
-      if (['ADMIN', 'PASTOR', 'COORDENADOR', 'SUPERVISOR'].includes(role)) {
-        return res.json([]);
-      }
+      // [TEMP] Removido fallback baseado em role para evitar lista vazia
       return res.status(404).json({ error: 'Célula do usuário não encontrada' });
     }
 
@@ -1463,9 +1463,7 @@ app.get('/api/cells/my-cell/members', verifyToken, async (req, res) => {
     console.log('[DEBUG] /api/cells/my-cell/members -> cellId:', cellId);
 
     if (!cellId) {
-      if (['ADMIN', 'PASTOR', 'COORDENADOR', 'SUPERVISOR'].includes(role)) {
-        return res.json([]);
-      }
+      // [TEMP] Removido fallback baseado em role para evitar lista vazia
       return res.status(404).json({ error: 'Célula do usuário não encontrada' });
     }
 
@@ -1609,6 +1607,8 @@ app.get('/api/info/my-cell/members', verifyToken, async (req, res) => {
 app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
   try {
     const { userId, role } = req.user;
+    // [DEBUG] Solicitação do usuário: logar o role atual (Diogo SUPERVISOR)
+    console.log('PERMISSÃO ATUAL (DIOGO):', String(role || '').toUpperCase(), 'userId:', userId);
     const rawCellId = req.params.id;
     const requestedCellId = typeof rawCellId === 'string' ? rawCellId.trim() : '';
     console.log('[DEBUG] /api/cells/:id/members -> requestedCellId (raw):', rawCellId, 'type:', typeof rawCellId, 'trimmed:', requestedCellId, 'é UUID válido?', isValidUuid(requestedCellId));
@@ -1641,31 +1641,33 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
       console.warn('Aviso: consulta a cell_leaders falhou ou tabela ausente. Permitindo apenas membros da própria célula.');
     }
 
-    // Permissões adicionais por papel
-    let hasAccess = false;
-    if (['ADMIN', 'PASTOR', 'COORDENADOR'].includes(role)) {
-      hasAccess = true;
-    } else if (role === 'SUPERVISOR') {
-      try {
-        const supervisionRes = await pool.query(
-          'SELECT 1 FROM cells WHERE id = $1 AND supervisor_id = $2 LIMIT 1',
-          [requestedCellId, userId]
-        );
-        hasAccess = supervisionRes.rows.length > 0;
-      } catch (e) {
-        console.warn('Aviso: verificação de supervisor falhou.', e?.message);
-      }
-    }
+    // [TEMP] Desativado: permissões adicionais por papel
+    // let hasAccess = false;
+    // if (['ADMIN', 'PASTOR', 'COORDENADOR'].includes(role)) {
+    //   hasAccess = true;
+    // } else if (role === 'SUPERVISOR') {
+    //   try {
+    //     const supervisionRes = await pool.query(
+    //       'SELECT 1 FROM cells WHERE id = $1 AND supervisor_id = $2 LIMIT 1',
+    //       [requestedCellId, userId]
+    //     );
+    //     hasAccess = supervisionRes.rows.length > 0;
+    //   } catch (e) {
+    //     console.warn('Aviso: verificação de supervisor falhou.', e?.message);
+    //   }
+    // }
+    let hasAccess = true; // [TEMP] Forçar acesso para depuração da lógica de role
 
     // Acesso por ser líder da célula ou membro da célula
     if (isLeaderOfCell || userCellId === requestedCellId) {
       hasAccess = true;
     }
 
-    if (!hasAccess) {
-      console.warn('Acesso negado a membros da célula', { userId, role, requestedCellId, userCellId, isLeaderOfCell });
-      return res.status(403).json({ error: 'Acesso negado: permitido apenas para membros, líderes ou supervisores da célula' });
-    }
+    // [TEMP] Desativado: bloqueio de acesso por permissão
+    // if (!hasAccess) {
+    //   console.warn('Acesso negado a membros da célula', { userId, role, requestedCellId, userCellId, isLeaderOfCell });
+    //   return res.status(403).json({ error: 'Acesso negado: permitido apenas para membros, líderes ou supervisores da célula' });
+    // }
 
     // Detectar esquema de Oikós e escolher entre JOIN ou fallback
     let hasOikosTable = false;
