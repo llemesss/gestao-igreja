@@ -150,8 +150,11 @@ const cellsApi = {
   },
 
   getMyCells: async () => {
-    const response = await apiClient.get('/users/my-cells');
-    return response.data;
+    // Usar endpoint funcional com lógica por role: /api/cells
+    const response = await apiClient.get('/cells');
+    // Normalizar para sempre retornar um array
+    const data = response.data;
+    return Array.isArray(data) ? data : (Array.isArray(data?.cells) ? data.cells : []);
   },
 
   getAll: async () => {

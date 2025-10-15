@@ -83,8 +83,12 @@ export default function DashboardPage() {
         // Carregar células (se tiver permissão)
         else if (user && auth.isLeaderOrAbove()) {
           const cellsResponse = await apiMethods.cells.getCells();
-          if (cellsResponse.success && cellsResponse.data) {
-            setCells(cellsResponse.data);
+          if (Array.isArray(cellsResponse)) {
+            setCells(cellsResponse);
+          } else if (cellsResponse && Array.isArray((cellsResponse as any).data)) {
+            setCells((cellsResponse as any).data);
+          } else {
+            setCells([]);
           }
         }
 

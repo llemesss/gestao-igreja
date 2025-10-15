@@ -79,7 +79,8 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, cells, onCl
   const fetchSupervisedCells = async (userId: string) => {
     try {
       const response = await api.get(`/users/${userId}/supervised-cells`);
-      const supervisedCells = response.data.map((cell: { id: string }) => cell.id);
+      const cellsList = Array.isArray(response?.data) ? response.data : [];
+      const supervisedCells = cellsList.map((cell: { id: string }) => cell.id);
       setSelectedCellIds(supervisedCells);
     } catch (error) {
       console.error('Erro ao buscar células supervisionadas:', error);
@@ -280,7 +281,7 @@ export default function GerenciarUsuariosView() {
         const user = row.original;
         
         // Se for supervisor, mostrar células supervisionadas
-        if (user.role === 'SUPERVISOR' && user.supervised_cells && user.supervised_cells.length > 0) {
+        if (user.role === 'SUPERVISOR' && Array.isArray(user.supervised_cells) && user.supervised_cells.length > 0) {
           return (
             <div className="space-y-1">
               <div className="text-xs text-blue-600 font-semibold">Supervisiona:</div>
