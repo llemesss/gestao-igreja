@@ -1565,11 +1565,12 @@ app.get('/api/cells/my-cell/members', verifyToken, async (req, res) => {
     console.log('[DEBUG] /api/cells/my-cell/members -> SQL (members):', sqlMembers, 'params:', [cellId]);
     const result = await pool.query(sqlMembers, [cellId]);
     const rows = (result.rows || []).map((r) => {
+      const { password_hash, ...clean } = r || {};
       // Mapear para payload padronizado
-      const oikos1Name = r.oikos1_name || r.oikos1 || null;
-      const oikos2Name = r.oikos2_name || r.oikos2 || null;
+      const oikos1Name = clean.oikos1_name || clean.oikos1 || null;
+      const oikos2Name = clean.oikos2_name || clean.oikos2 || null;
       return {
-        ...r,
+        ...clean,
         // Saídas padronizadas
         oikos_relacao_1: oikos1Name ? { nome: oikos1Name } : null,
         oikos_relacao_2: oikos2Name ? { nome: oikos2Name } : null,
@@ -1792,10 +1793,11 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
 
     // Padronizar payload com objetos aninhados para Oikós e manter compatibilidade
     const rows = (result.rows || []).map((r) => {
-      const oikos1Name = r.oikos1_name || r.oikos1 || null;
-      const oikos2Name = r.oikos2_name || r.oikos2 || null;
+      const { password_hash, ...clean } = r || {};
+      const oikos1Name = clean.oikos1_name || clean.oikos1 || null;
+      const oikos2Name = clean.oikos2_name || clean.oikos2 || null;
       return {
-        ...r,
+        ...clean,
         // Novos nomes padronizados
         oikos_relacao_1: oikos1Name ? { nome: oikos1Name } : null,
         oikos_relacao_2: oikos2Name ? { nome: oikos2Name } : null,

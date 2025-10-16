@@ -207,7 +207,7 @@ export default function CellDetailClient() {
             <p><strong>Descrição:</strong> ${cell?.description || 'Não informado'}</p>
             <p><strong>Supervisor:</strong> ${cell?.supervisor_name || 'Não designado'}</p>
             <p><strong>Total de Membros:</strong> ${cell?.member_count}</p>
-            <p><strong>Criada em:</strong> ${new Date(cell?.created_at || '').toLocaleDateString('pt-BR')}</p>
+            <p><strong>Criada em:</strong> ${cell?.created_at ? new Date(cell.created_at).toLocaleDateString('pt-BR') : 'N/A'}</p>
           </div>
           
           <div class="members">
@@ -227,7 +227,7 @@ export default function CellDetailClient() {
                     <td>${member.name}</td>
                     <td>${member.email}</td>
                     <td>${getRoleLabel(member.role)}</td>
-                    <td>${new Date(member.joined_at).toLocaleDateString('pt-BR')}</td>
+                    <td>${(member.created_at || member.joined_at) ? new Date(member.created_at || member.joined_at).toLocaleDateString('pt-BR') : 'N/A'}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -374,7 +374,7 @@ export default function CellDetailClient() {
                 <div>
                   <p className="text-sm font-medium text-gray-600">Criada em</p>
                   <p className="text-sm font-semibold text-gray-900">
-                    {new Date(cell.created_at).toLocaleDateString('pt-BR')}
+                    {cell?.created_at ? new Date(cell.created_at).toLocaleDateString('pt-BR') : 'N/A'}
                   </p>
                 </div>
                 <Calendar className="h-8 w-8 text-gray-600" />
@@ -392,7 +392,7 @@ export default function CellDetailClient() {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {cell.leaders.map((leader) => (
-                  <div key={leader.id} className="border rounded-lg p-4 bg-green-50">
+                  <div key={leader.id} className="border rounded-lg p-4 bg-green-50 break-words">
                     <div className="flex items-center space-x-3">
                       <div className="h-10 w-10 bg-green-100 rounded-full flex items-center justify-center">
                         <Users className="h-5 w-5 text-green-600" />
@@ -444,13 +444,13 @@ export default function CellDetailClient() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
                 {filteredMembers.map((member) => (
-                  <div key={member.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                  <div key={member.id} className="border rounded-lg p-4 hover:bg-gray-50 break-words">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4">
                         <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
                           <Users className="h-6 w-6 text-blue-600" />
                         </div>
-                        <div>
+                        <div className="break-words">
                           <div className="flex items-center space-x-3 mb-1">
                             <h3 className="font-semibold text-gray-900">{member.name}</h3>
                             <Badge className={getRoleBadgeColor(member.role)}>
@@ -476,7 +476,14 @@ export default function CellDetailClient() {
                             )}
                             <div className="flex items-center space-x-2">
                               <Calendar className="h-4 w-4" />
-                              <span>Membro desde {new Date(member.joined_at).toLocaleDateString('pt-BR')}</span>
+                              <span>
+                                {(() => {
+                                  const memberJoinedDate = member?.created_at || member?.joined_at;
+                                  return memberJoinedDate
+                                    ? `Membro desde ${new Date(memberJoinedDate).toLocaleDateString('pt-BR')}`
+                                    : 'Membro desde: N/A';
+                                })()}
+                              </span>
                             </div>
                             {member.cell_name && (
                               <div className="flex items-center space-x-2">
