@@ -1544,11 +1544,29 @@ app.get('/api/cells/my-cell/members', verifyToken, async (req, res) => {
       console.warn('[DEBUG] Falha ao verificar FK users.cell_id (my-cell):', e?.message || e);
     }
 
+    // Verificar presença da coluna opcional users.funcao_na_celula
+    let hasFuncaoNaCelula = false;
+    try {
+      const colCheck = await pool.query(
+        `SELECT EXISTS (
+           SELECT 1 FROM information_schema.columns 
+           WHERE table_name = 'users' AND column_name = 'funcao_na_celula'
+         ) AS has_col`
+      );
+      hasFuncaoNaCelula = Boolean(colCheck.rows?.[0]?.has_col);
+      console.log('[DEBUG] Coluna users.funcao_na_celula existe? (my-cell)', hasFuncaoNaCelula);
+    } catch (e) {
+      console.warn('[DEBUG] Falha ao verificar coluna users.funcao_na_celula (my-cell):', e?.message || e);
+    }
+
+    const funcaoSelect = hasFuncaoNaCelula ? 'u.funcao_na_celula' : "NULL::text AS funcao_na_celula";
+
     let sqlMembers;
     if (hasOikosTable && oikos1Fk && oikos2Fk) {
       sqlMembers = `
         SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
                u.birth_date, u.gender, u.marital_status,
+               ${funcaoSelect},
                u.${oikos1Fk} AS oikos1_id, u.${oikos2Fk} AS oikos2_id,
                o1.name AS oikos1_name, o2.name AS oikos2_name,
                u.created_at
@@ -1562,6 +1580,7 @@ app.get('/api/cells/my-cell/members', verifyToken, async (req, res) => {
       sqlMembers = `
         SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
                u.birth_date, u.gender, u.marital_status,
+               ${funcaoSelect},
                u.oikos1, u.oikos2,
                u.created_at
         FROM users u
@@ -1736,6 +1755,23 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
       console.warn('[DEBUG] Falha ao verificar FK users.cell_id:', e?.message || e);
     }
 
+    // Verificar presença da coluna opcional users.funcao_na_celula
+    let hasFuncaoNaCelula = false;
+    try {
+      const colCheck = await pool.query(
+        `SELECT EXISTS (
+           SELECT 1 FROM information_schema.columns 
+           WHERE table_name = 'users' AND column_name = 'funcao_na_celula'
+         ) AS has_col`
+      );
+      hasFuncaoNaCelula = Boolean(colCheck.rows?.[0]?.has_col);
+      console.log('[DEBUG] Coluna users.funcao_na_celula existe?', hasFuncaoNaCelula);
+    } catch (e) {
+      console.warn('[DEBUG] Falha ao verificar coluna users.funcao_na_celula:', e?.message || e);
+    }
+
+    const funcaoSelect = hasFuncaoNaCelula ? 'u.funcao_na_celula' : "NULL::text AS funcao_na_celula";
+
     // [TEMP DEBUG] Supabase SDK desativado para forçar fallback SQL (pool.query)
     // if (supabaseClient) {
     //   try {
@@ -1772,7 +1808,7 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
       sqlMembers = `
         SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
                u.birth_date, u.gender, u.marital_status,
-               u.funcao_na_celula,
+               ${funcaoSelect},
                u.${oikos1Fk} AS oikos1_id, u.${oikos2Fk} AS oikos2_id,
                o1.name AS oikos1_name, o2.name AS oikos2_name,
                u.created_at
@@ -1787,7 +1823,7 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
       sqlMembers = `
         SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
                u.birth_date, u.gender, u.marital_status,
-               u.funcao_na_celula,
+               ${funcaoSelect},
                u.oikos1, u.oikos2,
                u.created_at
         FROM users u
