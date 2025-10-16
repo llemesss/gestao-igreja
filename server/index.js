@@ -910,7 +910,19 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
         console.error('ERRO PUT: Tipo inválido para funcao_na_celula.', { targetUserId, funcao_na_celula });
         return res.status(400).json({ error: 'Campo funcao_na_celula deve ser string ou null.' });
       }
-      normalizedFuncaoValue = typeof fnc === 'string' ? (fnc.trim() || null) : null;
+      // Normalização solicitada: "" e "Função" (placeholder) devem virar null
+      if (typeof fnc === 'string') {
+        const s = fnc.trim();
+        const sLower = s.toLowerCase();
+        const sLowerNoAccents = sLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (!s || sLower === 'função' || sLowerNoAccents === 'funcao') {
+          normalizedFuncaoValue = null;
+        } else {
+          normalizedFuncaoValue = s;
+        }
+      } else {
+        normalizedFuncaoValue = null;
+      }
 
       // Confirmar que a coluna existe antes de tentar atualizar
       try {

@@ -12,7 +12,7 @@ export function Layout({ children, title }: LayoutProps) {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header title={title} />
-      <main className="pt-24">
+      <main className="pt-20">
         <div className="p-6">
           {children}
         </div>
