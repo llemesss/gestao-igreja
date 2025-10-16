@@ -898,18 +898,21 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
 
     const { name, email, role: newRole, cell_id, cell_ids, funcao_na_celula } = req.body || {};
 
-    // Se o payload incluir funcao_na_celula, validar conteúdo
-    if (Object.prototype.hasOwnProperty.call((req.body || {}), 'funcao_na_celula')) {
+    // Controle de atualização de funcao_na_celula
+    const wantUpdateFuncao = Object.prototype.hasOwnProperty.call((req.body || {}), 'funcao_na_celula');
+    let allowUpdateFuncao = false;
+    let normalizedFuncaoValue;
+
+    if (wantUpdateFuncao) {
       const fnc = funcao_na_celula;
-      if (
-        fnc === undefined || fnc === null ||
-        (typeof fnc === 'string' && fnc.trim() === '') ||
-        (typeof fnc !== 'string')
-      ) {
-        console.error('ERRO PUT: Dados de atualização inválidos (funcao_na_celula).', { targetUserId, funcao_na_celula });
-        return res.status(400).json({ error: 'Dados ou ID de usuário inválido para atualização.' });
+      // Aceitar string ou null; outros tipos são inválidos
+      if (fnc !== null && typeof fnc !== 'string') {
+        console.error('ERRO PUT: Tipo inválido para funcao_na_celula.', { targetUserId, funcao_na_celula });
+        return res.status(400).json({ error: 'Campo funcao_na_celula deve ser string ou null.' });
       }
-      // Opcional: confirmar coluna existe antes de tentar atualizar
+      normalizedFuncaoValue = typeof fnc === 'string' ? (fnc.trim() || null) : null;
+
+      // Confirmar que a coluna existe antes de tentar atualizar
       try {
         const colExists = await pool.query(
           `SELECT EXISTS (
@@ -922,9 +925,11 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
           console.warn('[PUT] Coluna funcao_na_celula ausente no schema users.');
           return res.status(400).json({ error: 'Coluna funcao_na_celula indisponível para atualização.' });
         }
+        allowUpdateFuncao = true;
       } catch (checkErr) {
         console.warn('[PUT] Falha ao verificar coluna funcao_na_celula:', checkErr?.message || checkErr);
-        // Prosseguir com cautela; se a verificação falhar, evitamos atualizar este campo
+        // Não atualizar este campo se a verificação falhar
+        allowUpdateFuncao = false;
       }
     }
 
@@ -935,9 +940,9 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
     if (typeof email === 'string') { fields.push('email'); values.push(email.toLowerCase()); }
     if (typeof newRole === 'string') { fields.push('role'); values.push(newRole); }
     if (cell_id !== undefined) { fields.push('cell_id'); values.push(cell_id || null); }
-    if (funcao_na_celula !== undefined) {
-      const funcaoValue = (typeof funcao_na_celula === 'string' && funcao_na_celula.trim() === '') ? null : funcao_na_celula;
-      fields.push('funcao_na_celula'); values.push(funcaoValue);
+    if (wantUpdateFuncao && allowUpdateFuncao) {
+      fields.push('funcao_na_celula');
+      values.push(normalizedFuncaoValue);
     }
 
     let updatedUser = null;
