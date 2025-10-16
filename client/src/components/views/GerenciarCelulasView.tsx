@@ -135,7 +135,7 @@ const CreateEditCellModal: React.FC<CreateEditCellModalProps> = ({ isOpen, cell,
             Líderes da Célula
           </label>
           <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-2">
-            {leaders.length === 0 ? (
+            {!Array.isArray(leaders) || leaders.length === 0 ? (
               <p className="text-gray-500 text-sm">Nenhum líder disponível</p>
             ) : (
               leaders.map((leader) => (
@@ -297,7 +297,8 @@ export default function GerenciarCelulasView() {
     try {
       // Buscar apenas dados das células - o backend já retorna as informações necessárias
       const cellsResponse = await api.get('/cells');
-      setCells(cellsResponse.data || []);
+      const data = cellsResponse?.data;
+      setCells(Array.isArray(data) ? data : (data?.cells || []));
       
       // Para líderes, buscar usuários apenas quando necessário (no modal)
       // Isso será feito de forma lazy quando o modal for aberto

@@ -57,10 +57,14 @@ export default function CellDetailClient() {
   const [memberModalOpen, setMemberModalOpen] = useState(false);
   const [addMemberModalOpen, setAddMemberModalOpen] = useState(false);
 
-  const filteredMembers = members.filter(member =>
-    member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    member.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const normalizedSearch = (searchTerm || '').trim().toLowerCase();
+  const safeMembers = Array.isArray(members) ? members : [];
+  const filteredMembers = normalizedSearch
+    ? safeMembers.filter(member =>
+        (member.name || '').toLowerCase().includes(normalizedSearch) ||
+        (member.email || '').toLowerCase().includes(normalizedSearch)
+      )
+    : safeMembers;
 
   const loadCellDetail = useCallback(async () => {
     try {
@@ -83,7 +87,7 @@ export default function CellDetailClient() {
       console.log('🔍 [DEBUG] Tipo dos dados:', typeof data);
       console.log('🔍 [DEBUG] É array?', Array.isArray(data));
       console.log('🔍 [DEBUG] Quantidade de membros:', data?.length);
-      setMembers(data);
+      setMembers(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('❌ [DEBUG] Erro ao carregar membros:', error);
     }
@@ -207,7 +211,7 @@ export default function CellDetailClient() {
           </div>
           
           <div class="members">
-            <h3>Lista de Membros (${members.length})</h3>
+            <h3>Lista de Membros (${Array.isArray(members) ? members.length : 0})</h3>
             <table>
               <thead>
                 <tr>
@@ -218,7 +222,7 @@ export default function CellDetailClient() {
                 </tr>
               </thead>
               <tbody>
-                ${members.map(member => `
+                ${(Array.isArray(members) ? members : []).map(member => `
                   <tr>
                     <td>${member.name}</td>
                     <td>${member.email}</td>
@@ -327,7 +331,7 @@ export default function CellDetailClient() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Total de Membros</p>
-                  <p className="text-2xl font-bold text-blue-600">{members.length}</p>
+                  <p className="text-2xl font-bold text-blue-600">{Array.isArray(members) ? members.length : 0}</p>
                 </div>
                 <Users className="h-8 w-8 text-blue-600" />
               </div>
@@ -339,7 +343,7 @@ export default function CellDetailClient() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Líderes</p>
-                  <p className="text-2xl font-bold text-green-600">{cell.leaders.length}</p>
+                  <p className="text-2xl font-bold text-green-600">{Array.isArray(cell.leaders) ? cell.leaders.length : 0}</p>
                 </div>
                 <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
                   <div className="h-3 w-3 bg-green-600 rounded-full"></div>
@@ -380,7 +384,7 @@ export default function CellDetailClient() {
         </div>
 
         {/* Leaders Section */}
-        {cell.leaders.length > 0 && (
+        {Array.isArray(cell.leaders) && cell.leaders.length > 0 && (
           <Card className="mb-8">
             <CardHeader>
               <CardTitle>Líderes da Célula</CardTitle>

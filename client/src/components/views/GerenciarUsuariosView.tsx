@@ -194,10 +194,10 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, cells, onCl
               Células Supervisionadas
             </label>
             <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-300 rounded-lg p-3 bg-white">
-              {cells.length === 0 ? (
+              {!Array.isArray(cells) || cells.length === 0 ? (
                 <p className="text-gray-500 text-sm">Nenhuma célula disponível</p>
               ) : (
-                cells.map((cell) => (
+                (Array.isArray(cells) ? cells : []).map((cell) => (
                   <label key={cell.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
                     <input
                       type="checkbox"
@@ -209,10 +209,10 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, cells, onCl
                   </label>
                 ))
               )}
-              {selectedCellIds.length > 0 && (
+              {(Array.isArray(selectedCellIds) ? selectedCellIds.length : 0) > 0 && (
                 <div className="mt-2 pt-2 border-t border-gray-200">
                   <p className="text-xs text-gray-500">
-                    {selectedCellIds.length} célula(s) selecionada(s)
+                    {(Array.isArray(selectedCellIds) ? selectedCellIds.length : 0)} célula(s) selecionada(s)
                   </p>
                 </div>
               )}

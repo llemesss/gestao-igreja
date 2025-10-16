@@ -348,7 +348,7 @@ export default function DesignarCelulasClient({ params }: DesignarCelulasClientP
           {/* Available Cells */}
           <Card>
             <CardHeader>
-              <CardTitle>Células Disponíveis ({cells.length})</CardTitle>
+              <CardTitle>Células Disponíveis ({Array.isArray(cells) ? cells.length : 0})</CardTitle>
             </CardHeader>
             <CardContent>
               {/* UI Condicional baseada no papel do usuário */}
@@ -367,7 +367,7 @@ export default function DesignarCelulasClient({ params }: DesignarCelulasClientP
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {cells.map((cell) => (
+                    {(Array.isArray(cells) ? cells : []).map((cell) => (
                       <div key={cell.id} className="p-4 border rounded-lg hover:bg-gray-50">
                         <div className="flex items-start space-x-3">
                           <input
@@ -390,7 +390,7 @@ export default function DesignarCelulasClient({ params }: DesignarCelulasClientP
                     ))}
                   </div>
                   
-                  {cells.length === 0 && (
+                  {(!Array.isArray(cells) || cells.length === 0) && (
                     <div className="text-center py-8">
                       <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                       <p className="text-gray-600">Nenhuma célula encontrada</p>
@@ -400,7 +400,7 @@ export default function DesignarCelulasClient({ params }: DesignarCelulasClientP
               ) : (
                 // Interface original para líderes e outros papéis - seleção única
                 <div className="space-y-4">
-                  {cells.map((cell) => {
+                  {(Array.isArray(cells) ? cells : []).map((cell) => {
                     const isAssigned = isAssignedToCell(cell.id);
                     const currentRole = getAssignmentRole(cell.id);
                     
