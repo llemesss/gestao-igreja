@@ -1769,7 +1769,7 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
         FROM users u
         LEFT JOIN oikos o1 ON o1.id = u.${oikos1Fk}
         LEFT JOIN oikos o2 ON o2.id = u.${oikos2Fk}
-        WHERE u."cell_id" = $1
+        WHERE u.cell_id = $1
         ORDER BY u.name ASC
       `;
       console.log('[DEBUG] /api/cells/:id/members -> esquema Oikós detectado. Colunas FK:', { oikos1Fk, oikos2Fk });
