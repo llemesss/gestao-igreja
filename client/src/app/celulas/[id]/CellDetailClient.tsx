@@ -26,6 +26,7 @@ interface Member {
   oikos_relacao_2?: { nome?: string } | null;
   oikos_1?: { nome?: string } | null;
   oikos_2?: { nome?: string } | null;
+  funcao_na_celula?: string | null;
 }
 
 interface CellDetail {
@@ -127,6 +128,20 @@ export default function CellDetailClient() {
     } catch (error) {
       console.error('Erro ao remover membro:', error);
       alert('Erro ao remover membro. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFunctionChange = async (memberId: string, newFunction: string) => {
+    try {
+      setLoading(true);
+      await apiMethods.users.update(memberId, { funcao_na_celula: newFunction || null });
+      // Atualizar estado local para refletir imediatamente
+      setMembers((prev) => prev.map((m) => m.id === memberId ? { ...m, funcao_na_celula: newFunction || null } : m));
+    } catch (err) {
+      console.error('Erro ao atualizar função na célula:', err);
+      alert('Não foi possível atualizar a função.');
     } finally {
       setLoading(false);
     }
@@ -291,13 +306,6 @@ export default function CellDetailClient() {
             </div>
           </div>
           <div className="flex space-x-2">
-            <Button 
-              variant="outline"
-              onClick={() => router.push(`/celulas/${cellId}/designar-pessoas`)}
-            >
-              <UserPlus className="h-4 w-4 mr-2" />
-              Designar Pessoas
-            </Button>
             <Button 
               variant="outline"
               onClick={() => router.push(`/celulas/${cellId}/editar`)}
@@ -514,6 +522,18 @@ export default function CellDetailClient() {
                         </div>
                       </div>
                       <div className="flex items-center space-x-2 flex-shrink-0">
+                        <select
+                          value={member.funcao_na_celula || ''}
+                          onChange={(e) => handleFunctionChange(member.id, e.target.value)}
+                          className="border rounded p-1 text-sm"
+                        >
+                          <option value="">Função</option>
+                          <option value="SECRETARIO">Secretário(a)</option>
+                          <option value="TESOUREIRO">Tesoureiro(a)</option>
+                          <option value="LOUVOR">Louvor</option>
+                          <option value="INTERCESSAO">Intercessão</option>
+                          <option value="EVENTOS">Eventos</option>
+                        </select>
                         <Button
                           variant="outline"
                           size="sm"

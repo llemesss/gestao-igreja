@@ -204,6 +204,10 @@ const ensureSchema = async () => {
         ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE';
       `);
       await pool.query(`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS funcao_na_celula TEXT;
+      `);
+      await pool.query(`
         CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
       `);
 
@@ -884,7 +888,7 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
     }
 
     const targetUserId = req.params.id;
-    const { name, email, role: newRole, cell_id, cell_ids } = req.body || {};
+    const { name, email, role: newRole, cell_id, cell_ids, funcao_na_celula } = req.body || {};
 
     // Atualização básica de perfil (opcional)
     const fields = [];
@@ -893,6 +897,10 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
     if (typeof email === 'string') { fields.push('email'); values.push(email.toLowerCase()); }
     if (typeof newRole === 'string') { fields.push('role'); values.push(newRole); }
     if (cell_id !== undefined) { fields.push('cell_id'); values.push(cell_id || null); }
+    if (funcao_na_celula !== undefined) {
+      const funcaoValue = (typeof funcao_na_celula === 'string' && funcao_na_celula.trim() === '') ? null : funcao_na_celula;
+      fields.push('funcao_na_celula'); values.push(funcaoValue);
+    }
 
     let updatedUser = null;
     if (fields.length > 0) {
@@ -1764,6 +1772,7 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
       sqlMembers = `
         SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
                u.birth_date, u.gender, u.marital_status,
+               u.funcao_na_celula,
                u.${oikos1Fk} AS oikos1_id, u.${oikos2Fk} AS oikos2_id,
                o1.name AS oikos1_name, o2.name AS oikos2_name,
                u.created_at
@@ -1778,6 +1787,7 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
       sqlMembers = `
         SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
                u.birth_date, u.gender, u.marital_status,
+               u.funcao_na_celula,
                u.oikos1, u.oikos2,
                u.created_at
         FROM users u

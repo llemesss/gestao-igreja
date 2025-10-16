@@ -110,7 +110,7 @@ const usersApi = {
     return response.data;
   },
 
-  update: async (id: string, data: Partial<{ name: string; email: string; role: string; cell_id: string; cell_ids: string[] }>) => {
+  update: async (id: string, data: Partial<{ name: string; email: string; role: string; cell_id: string; cell_ids: string[]; funcao_na_celula: string | null }>) => {
     const response = await apiClient.put(`/users/${id}`, data);
     return response.data;
   },
