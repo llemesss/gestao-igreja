@@ -29,6 +29,7 @@ services:
     plan: free
     buildCommand: npm install && npm run build
     startCommand: npm start
+    healthCheckPath: /
     autoDeploy: true
     envVars:
       - key: NEXT_PUBLIC_API_URL
