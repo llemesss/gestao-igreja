@@ -457,15 +457,15 @@ export default function CellDetailClient() {
                               {getRoleLabel(member.role)}
                             </Badge>
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600">
+                          <div className="grid grid-cols-1 gap-2 text-sm text-gray-600">
                             <div className="flex items-center space-x-2">
                               <Mail className="h-4 w-4" />
-                              <span className="truncate max-w-[240px]">{member.email}</span>
+                              <span className="break-all">{member.email}</span>
                             </div>
                             {member.phone && (
                               <div className="flex items-center space-x-2">
                                 <Phone className="h-4 w-4" />
-                                <span className="truncate max-w-[180px]">{member.phone}</span>
+                                <span className="break-all">{member.phone}</span>
                               </div>
                             )}
                             {member.address && (
@@ -498,13 +498,16 @@ export default function CellDetailClient() {
                               (member.oikos_2 && member.oikos_2.nome) ||
                               member.oikos1 || member.oikos2
                             ) && (
-                              <div className="flex items-center space-x-2">
-                                <Users className="h-4 w-4" />
-                                <span className="truncate max-w-[240px]">
-                                  {(member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1) && `Oikós 1: ${member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1}`}
-                                  {((member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1) && (member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2)) ? ' · ' : ''}
-                                  {(member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2) && `Oikós 2: ${member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2}`}
-                                </span>
+                              <div className="flex items-start space-x-2">
+                                <Users className="h-4 w-4 mt-0.5" />
+                                <div className="flex flex-col text-xs mt-1 text-gray-600">
+                                  {(member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1) && (
+                                    <span className="break-words">Oikós 1: {member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1}</span>
+                                  )}
+                                  {(member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2) && (
+                                    <span className="break-words">Oikós 2: {member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2}</span>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </div>
