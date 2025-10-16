@@ -442,15 +442,15 @@ export default function CellDetailClient() {
                 <p className="text-gray-600">Nenhum membro encontrado</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 auto-rows-fr gap-4 p-4">
+              <ul className="divide-y divide-gray-200 p-2">
                 {filteredMembers.map((member) => (
-                  <div key={member.id} className="border rounded-lg p-4 hover:bg-gray-50 shadow-sm transition">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
+                  <li key={member.id} className="py-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start space-x-4 min-w-0">
+                        <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
                           <Users className="h-6 w-6 text-blue-600" />
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-center space-x-3 mb-1">
                             <h3 className="font-semibold text-gray-900 truncate max-w-[180px]">{member.name}</h3>
                             <Badge className={getRoleBadgeColor(member.role)}>
@@ -471,7 +471,7 @@ export default function CellDetailClient() {
                             {member.address && (
                               <div className="flex items-center space-x-2">
                                 <MapPin className="h-4 w-4" />
-                                <span className="truncate max-w-[240px]">{member.address}</span>
+                                <span className="break-words">{member.address}</span>
                               </div>
                             )}
                             <div className="flex items-center space-x-2">
@@ -488,7 +488,7 @@ export default function CellDetailClient() {
                             {member.cell_name && (
                               <div className="flex items-center space-x-2">
                                 <Users className="h-4 w-4" />
-                                <span className="truncate max-w-[240px]">Célula: {member.cell_name}</span>
+                                <span className="break-words">Célula: {member.cell_name}</span>
                               </div>
                             )}
                             {(
@@ -513,7 +513,7 @@ export default function CellDetailClient() {
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-2 flex-shrink-0">
                         <Button
                           variant="outline"
                           size="sm"
@@ -535,9 +535,9 @@ export default function CellDetailClient() {
                         </Button>
                       </div>
                     </div>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </CardContent>
         </Card>
