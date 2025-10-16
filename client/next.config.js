@@ -3,7 +3,8 @@ const nextConfig = {
   // Removendo export temporariamente para usar build padrão
   // output: 'export',
   output: 'standalone',
-  trailingSlash: true,
+  // trailingSlash pode causar comportamento inesperado atrás de proxies
+  trailingSlash: false,
   images: {
     unoptimized: true
   },
