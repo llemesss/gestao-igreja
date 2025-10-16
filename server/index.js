@@ -887,8 +887,46 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
       return res.status(403).json({ error: 'Acesso negado' });
     }
 
-    const targetUserId = req.params.id;
+    const rawTargetUserId = req.params.id;
+    const targetUserId = typeof rawTargetUserId === 'string' ? rawTargetUserId.trim() : '';
+
+    // Validação rigorosa de ID
+    if (!targetUserId || !isValidUuid(targetUserId)) {
+      console.error('ERRO PUT: Dados de atualização inválidos (ID).', { targetUserId });
+      return res.status(400).json({ error: 'Dados ou ID de usuário inválido para atualização.' });
+    }
+
     const { name, email, role: newRole, cell_id, cell_ids, funcao_na_celula } = req.body || {};
+
+    // Se o payload incluir funcao_na_celula, validar conteúdo
+    if (Object.prototype.hasOwnProperty.call((req.body || {}), 'funcao_na_celula')) {
+      const fnc = funcao_na_celula;
+      if (
+        fnc === undefined || fnc === null ||
+        (typeof fnc === 'string' && fnc.trim() === '') ||
+        (typeof fnc !== 'string')
+      ) {
+        console.error('ERRO PUT: Dados de atualização inválidos (funcao_na_celula).', { targetUserId, funcao_na_celula });
+        return res.status(400).json({ error: 'Dados ou ID de usuário inválido para atualização.' });
+      }
+      // Opcional: confirmar coluna existe antes de tentar atualizar
+      try {
+        const colExists = await pool.query(
+          `SELECT EXISTS (
+             SELECT 1 FROM information_schema.columns 
+             WHERE table_name = 'users' AND column_name = 'funcao_na_celula'
+           ) AS has_col`
+        );
+        const hasCol = Boolean(colExists.rows?.[0]?.has_col);
+        if (!hasCol) {
+          console.warn('[PUT] Coluna funcao_na_celula ausente no schema users.');
+          return res.status(400).json({ error: 'Coluna funcao_na_celula indisponível para atualização.' });
+        }
+      } catch (checkErr) {
+        console.warn('[PUT] Falha ao verificar coluna funcao_na_celula:', checkErr?.message || checkErr);
+        // Prosseguir com cautela; se a verificação falhar, evitamos atualizar este campo
+      }
+    }
 
     // Atualização básica de perfil (opcional)
     const fields = [];
@@ -906,8 +944,13 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
     if (fields.length > 0) {
       const set = fields.map((f, i) => `${f} = $${i+1}`).join(', ');
       const sql = `UPDATE users SET ${set}, updated_at = NOW() WHERE id = $${fields.length+1} RETURNING id, name, email, role, cell_id`;
-      const result = await pool.query(sql, [...values, targetUserId]);
-      updatedUser = result.rows[0];
+      try {
+        const result = await pool.query(sql, [...values, targetUserId]);
+        updatedUser = result.rows[0];
+      } catch (e) {
+        console.error('[PUT] Falha ao atualizar usuário', { message: e?.message, code: e?.code, detail: e?.detail });
+        return res.status(500).json({ error: 'Erro interno ao atualizar usuário' });
+      }
     } else {
       // Busca atual se não houve update de campos
       const resUser = await pool.query('SELECT id, name, email, role, cell_id FROM users WHERE id = $1', [targetUserId]);
@@ -1803,35 +1846,17 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
     //   // Em caso de erro ou SDK indisponível, cai para SQL abaixo
     // }
 
-    let sqlMembers;
-    if (hasOikosTable && oikos1Fk && oikos2Fk) {
-      sqlMembers = `
-        SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
-               u.birth_date, u.gender, u.marital_status,
-               ${funcaoSelect},
-               u.${oikos1Fk} AS oikos1_id, u.${oikos2Fk} AS oikos2_id,
-               o1.name AS oikos1_name, o2.name AS oikos2_name,
-               u.created_at
-        FROM users u
-        LEFT JOIN oikos o1 ON o1.id = u.${oikos1Fk}
-        LEFT JOIN oikos o2 ON o2.id = u.${oikos2Fk}
-        WHERE u.cell_id = $1
-        ORDER BY u.name ASC
-      `;
-      console.log('[DEBUG] /api/cells/:id/members -> esquema Oikós detectado. Colunas FK:', { oikos1Fk, oikos2Fk });
-    } else {
-      sqlMembers = `
-        SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
-               u.birth_date, u.gender, u.marital_status,
-               ${funcaoSelect},
-               u.oikos1, u.oikos2,
-               u.created_at
-        FROM users u
-        WHERE u.cell_id = $1
-        ORDER BY u.name ASC
-      `;
-      console.log('[DEBUG] /api/cells/:id/members -> usando fallback de colunas texto users.oikos1/users.oikos2');
-    }
+    let sqlMembers = `
+      SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+             u.birth_date, u.gender, u.marital_status,
+             ${funcaoSelect},
+             u.oikos1, u.oikos2,
+             u.created_at
+      FROM users u
+      WHERE u.cell_id = $1
+      ORDER BY u.name ASC
+    `;
+    console.log('[DEBUG] /api/cells/:id/members -> SQL simplificado sem JOINs de Oikós');
 
     console.log('[DEBUG] /api/cells/:id/members -> SQL (members):', sqlMembers, 'params:', [requestedCellId], 'paramType:', typeof requestedCellId);
     const result = await pool.query(sqlMembers, [requestedCellId]);
