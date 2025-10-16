@@ -419,21 +419,21 @@ export default function UsuariosPage() {
           ) : (
             <div className="space-y-4">
               {filteredUsers.map((user) => (
-                <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 break-words">
+                <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 shadow-sm transition">
                   <div className="flex items-center space-x-4">
                     <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                       <span className="text-blue-600 font-semibold">
                         {user.name.charAt(0).toUpperCase()}
                       </span>
                     </div>
-                    <div className="break-words">
-                      <h3 className="font-semibold text-gray-900">{user.name}</h3>
-                      <p className="text-gray-600 text-sm">{user.email}</p>
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-gray-900 truncate max-w-[200px]">{user.name}</h3>
+                      <p className="text-gray-600 text-sm truncate max-w-[240px]">{user.email}</p>
                       <p className="text-gray-500 text-xs">
                         Criado em: {user?.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : 'N/A'}
                       </p>
                       {user.cell_name && (
-                        <span className="text-blue-600 text-xs">Célula: {user.cell_name}</span>
+                        <span className="text-blue-600 text-xs truncate max-w-[240px]">Célula: {user.cell_name}</span>
                       )}
                       {user.role === 'LIDER' && user.cell_name && (
                         <span className="text-green-600 text-xs font-semibold">🌟 Líder desta célula</span>

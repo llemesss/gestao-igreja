@@ -392,14 +392,14 @@ export default function CellDetailClient() {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {cell.leaders.map((leader) => (
-                  <div key={leader.id} className="border rounded-lg p-4 bg-green-50 break-words">
-                    <div className="flex items-center space-x-3">
+                  <div key={leader.id} className="border rounded-lg p-4 bg-green-50">
+                    <div className="flex items-center space-x-3 min-w-0">
                       <div className="h-10 w-10 bg-green-100 rounded-full flex items-center justify-center">
                         <Users className="h-5 w-5 text-green-600" />
                       </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{leader.name}</h3>
-                        <p className="text-sm text-gray-600">{leader.email}</p>
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-gray-900 truncate max-w-[200px]">{leader.name}</h3>
+                        <p className="text-sm text-gray-600 truncate max-w-[240px]">{leader.email}</p>
                       </div>
                     </div>
                   </div>
@@ -442,17 +442,17 @@ export default function CellDetailClient() {
                 <p className="text-gray-600">Nenhum membro encontrado</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 auto-rows-fr gap-4 p-4">
                 {filteredMembers.map((member) => (
-                  <div key={member.id} className="border rounded-lg p-4 hover:bg-gray-50 break-words">
+                  <div key={member.id} className="border rounded-lg p-4 hover:bg-gray-50 shadow-sm transition">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4">
                         <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
                           <Users className="h-6 w-6 text-blue-600" />
                         </div>
-                        <div className="break-words">
+                        <div className="min-w-0">
                           <div className="flex items-center space-x-3 mb-1">
-                            <h3 className="font-semibold text-gray-900">{member.name}</h3>
+                            <h3 className="font-semibold text-gray-900 truncate max-w-[180px]">{member.name}</h3>
                             <Badge className={getRoleBadgeColor(member.role)}>
                               {getRoleLabel(member.role)}
                             </Badge>
@@ -460,18 +460,18 @@ export default function CellDetailClient() {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600">
                             <div className="flex items-center space-x-2">
                               <Mail className="h-4 w-4" />
-                              <span>{member.email}</span>
+                              <span className="truncate max-w-[240px]">{member.email}</span>
                             </div>
                             {member.phone && (
                               <div className="flex items-center space-x-2">
                                 <Phone className="h-4 w-4" />
-                                <span>{member.phone}</span>
+                                <span className="truncate max-w-[180px]">{member.phone}</span>
                               </div>
                             )}
                             {member.address && (
                               <div className="flex items-center space-x-2">
                                 <MapPin className="h-4 w-4" />
-                                <span>{member.address}</span>
+                                <span className="truncate max-w-[240px]">{member.address}</span>
                               </div>
                             )}
                             <div className="flex items-center space-x-2">
@@ -488,7 +488,7 @@ export default function CellDetailClient() {
                             {member.cell_name && (
                               <div className="flex items-center space-x-2">
                                 <Users className="h-4 w-4" />
-                                <span>Célula: {member.cell_name}</span>
+                                <span className="truncate max-w-[240px]">Célula: {member.cell_name}</span>
                               </div>
                             )}
                             {(
@@ -500,7 +500,7 @@ export default function CellDetailClient() {
                             ) && (
                               <div className="flex items-center space-x-2">
                                 <Users className="h-4 w-4" />
-                                <span>
+                                <span className="truncate max-w-[240px]">
                                   {(member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1) && `Oikós 1: ${member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1}`}
                                   {((member.oikos_relacao_1?.nome || member.oikos_1?.nome || member.oikos1) && (member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2)) ? ' · ' : ''}
                                   {(member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2) && `Oikós 2: ${member.oikos_relacao_2?.nome || member.oikos_2?.nome || member.oikos2}`}
