@@ -1727,36 +1727,36 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
       console.warn('[DEBUG] Falha ao verificar FK users.cell_id:', e?.message || e);
     }
 
-    // Se Supabase Client estiver disponível, tentar via SDK primeiro (bypass RLS com Service Role)
-    if (supabaseClient) {
-      try {
-        const { data, error } = await supabaseClient
-          .from('users')
-          .select('id,name,email,role,phone,whatsapp,birth_date,gender,marital_status,oikos1,oikos2,created_at')
-          .eq('cell_id', requestedCellId)
-          .order('name', { ascending: true });
-        if (error) {
-          console.error('[Supabase] Falha na query de membros via SDK:', error?.message || error);
-        } else if (Array.isArray(data)) {
-          console.log(`[Supabase] /api/cells/:id/members -> retornou ${data.length} registros via SDK`);
-          const rows = (data || []).map((r) => {
-            const oikos1Name = r.oikos1 || null;
-            const oikos2Name = r.oikos2 || null;
-            return {
-              ...r,
-              oikos_relacao_1: oikos1Name ? { nome: oikos1Name } : null,
-              oikos_relacao_2: oikos2Name ? { nome: oikos2Name } : null,
-              oikos_1: oikos1Name ? { nome: oikos1Name } : null,
-              oikos_2: oikos2Name ? { nome: oikos2Name } : null,
-            };
-          });
-          return res.json(rows);
-        }
-      } catch (sdkErr) {
-        console.error('[Supabase] Erro inesperado via SDK:', sdkErr?.message || sdkErr);
-      }
-      // Em caso de erro ou SDK indisponível, cai para SQL abaixo
-    }
+    // [TEMP DEBUG] Supabase SDK desativado para forçar fallback SQL (pool.query)
+    // if (supabaseClient) {
+    //   try {
+    //     const { data, error } = await supabaseClient
+    //       .from('users')
+    //       .select('id,name,email,role,phone,whatsapp,birth_date,gender,marital_status,oikos1,oikos2,created_at')
+    //       .eq('cell_id', requestedCellId)
+    //       .order('name', { ascending: true });
+    //     if (error) {
+    //       console.error('[Supabase] Falha na query de membros via SDK:', error?.message || error);
+    //     } else if (Array.isArray(data)) {
+    //       console.log(`[Supabase] /api/cells/:id/members -> retornou ${data.length} registros via SDK`);
+    //       const rows = (data || []).map((r) => {
+    //         const oikos1Name = r.oikos1 || null;
+    //         const oikos2Name = r.oikos2 || null;
+    //         return {
+    //           ...r,
+    //           oikos_relacao_1: oikos1Name ? { nome: oikos1Name } : null,
+    //           oikos_relacao_2: oikos2Name ? { nome: oikos2Name } : null,
+    //           oikos_1: oikos1Name ? { nome: oikos1Name } : null,
+    //           oikos_2: oikos2Name ? { nome: oikos2Name } : null,
+    //         };
+    //       });
+    //       return res.json(rows);
+    //     }
+    //   } catch (sdkErr) {
+    //     console.error('[Supabase] Erro inesperado via SDK:', sdkErr?.message || sdkErr);
+    //   }
+    //   // Em caso de erro ou SDK indisponível, cai para SQL abaixo
+    // }
 
     let sqlMembers;
     if (hasOikosTable && oikos1Fk && oikos2Fk) {
@@ -1780,7 +1780,7 @@ app.get('/api/cells/:id/members', verifyToken, async (req, res) => {
                u.oikos1, u.oikos2,
                u.created_at
         FROM users u
-        WHERE u."cell_id" = $1
+        WHERE u.cell_id = $1
         ORDER BY u.name ASC
       `;
       console.log('[DEBUG] /api/cells/:id/members -> usando fallback de colunas texto users.oikos1/users.oikos2');
