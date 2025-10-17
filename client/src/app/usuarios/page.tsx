@@ -309,6 +309,13 @@ export default function UsuariosPage() {
       if (cellId !== undefined) {
         updateData.cell_id = cellId || null;
       }
+      // Incluir atribuição de liderança quando o papel for LIDER
+      if (role === 'LIDER') {
+        updateData.leader_cell_id = cellId || null;
+      } else {
+        // Se não for líder, garantir remoção de qualquer liderança pré-existente
+        updateData.leader_cell_id = null;
+      }
       
       await apiMethods.users.update(userId, updateData);
       

@@ -47,7 +47,8 @@ interface EditUserModalProps {
     email: string; 
     role: string; 
     cell_id?: string; 
-    cell_ids?: string[] 
+    cell_ids?: string[];
+    leader_cell_id?: string | null;
   }) => Promise<void>;
 }
 
@@ -55,12 +56,14 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, cells, onCl
   const [role, setRole] = useState('');
   const [cellId, setCellId] = useState('');
   const [selectedCellIds, setSelectedCellIds] = useState<string[]>([]);
+  const [leaderCellId, setLeaderCellId] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (user) {
       setRole(user.role);
       setCellId(user.cell_id || '');
+      setLeaderCellId('');
       // Para supervisores, inicializar com as células supervisionadas
       if (user.role === 'SUPERVISOR') {
         // Buscar células supervisionadas pelo usuário
@@ -72,6 +75,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, cells, onCl
       // Limpar estados quando não há usuário
       setRole('');
       setCellId('');
+      setLeaderCellId('');
       setSelectedCellIds([]);
     }
   }, [user]);
@@ -108,7 +112,8 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, cells, onCl
         email: string; 
         role: string; 
         cell_id?: string; 
-        cell_ids?: string[] 
+        cell_ids?: string[];
+        leader_cell_id?: string | null;
       } = {
         name: user.name,     // Campo obrigatório
         email: user.email,   // Campo obrigatório
@@ -119,6 +124,19 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, cells, onCl
       // Para supervisores, também enviar array de cell_ids (células supervisionadas)
       if (role === 'SUPERVISOR') {
         updateData.cell_ids = selectedCellIds;
+      }
+
+      // Para líderes, exigir seleção de célula a liderar
+      if (role === 'LIDER') {
+        if (!leaderCellId) {
+          toast.error('Selecione uma célula para o líder.');
+          setSaving(false);
+          return;
+        }
+        updateData.leader_cell_id = leaderCellId;
+      } else {
+        // Papéis que não sejam LIDER removem qualquer liderança existente
+        updateData.leader_cell_id = null;
       }
       
       console.log('=== DEBUG EditUserModal ===');
@@ -217,6 +235,27 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, cells, onCl
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Célula para Liderar - apenas quando role = LIDER */}
+        {role === 'LIDER' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Célula para Liderar
+            </label>
+            <select
+              value={leaderCellId}
+              onChange={(e) => setLeaderCellId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Selecione uma célula</option>
+              {cells.map((cell) => (
+                <option key={cell.id} value={cell.id}>
+                  {cell.name}
+                </option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -472,7 +511,8 @@ export default function GerenciarUsuariosView() {
     email: string; 
     role: string; 
     cell_id?: string; 
-    cell_ids?: string[] 
+    cell_ids?: string[];
+    leader_cell_id?: string | null;
   }) => {
     console.log('=== DEBUG handleSaveUser ===');
     console.log('userId:', userId);

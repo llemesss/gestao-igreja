@@ -230,6 +230,21 @@ const ensureSchema = async () => {
         CREATE INDEX IF NOT EXISTS idx_cells_secretary ON cells(secretary_id);
       `);
 
+      // Adicionar coluna leader_id para liderança exclusiva (um para um)
+      await pool.query(`
+        DO $$ BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'cells' AND column_name = 'leader_id'
+          ) THEN
+            ALTER TABLE cells ADD COLUMN leader_id UUID;
+          END IF;
+        END $$;
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_cells_leader ON cells(leader_id);
+      `);
+
       // Garantir tabela de líderes da célula compatível com inserções (created_at)
       await pool.query(`
         CREATE TABLE IF NOT EXISTS cell_leaders (
@@ -974,7 +989,10 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
     const values = [];
     if (typeof name === 'string') { fields.push('name'); values.push(name); }
     if (typeof email === 'string') { fields.push('email'); values.push(email.toLowerCase()); }
-    if (typeof newRole === 'string') { fields.push('role'); values.push(newRole); }
+    if (typeof newRole === 'string') {
+      const normalizedRole = newRole.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      fields.push('role'); values.push(normalizedRole);
+    }
     if (cell_id !== undefined) { fields.push('cell_id'); values.push(cell_id || null); }
     if (wantUpdateFuncao && allowUpdateFuncao) {
       fields.push('funcao_na_celula');
@@ -1063,37 +1081,34 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
       }
     }
 
-    // Liderança: processar campo leader_cell_id quando presente
+    // Liderança exclusiva via cells.leader_id
     // Regras:
-    // - Se leader_cell_id === null OU role foi alterado para algo diferente de 'LIDER', remover todas as lideranças deste usuário
-    // - Se leader_cell_id for uma UUID válida, inserir (idempotente) a liderança (user_id, cell_id)
-    // - Caso nenhum leader_cell_id seja enviado, não alteramos a liderança existente (a menos que role != LIDER, conforme regra acima)
+    // - Sempre limpar todas as células onde este usuário era líder
+    // - Se newRole === 'LIDER' e leader_cell_id for UUID válida, atribuir como leader_id desta célula
     try {
-      // Se o papel foi explicitamente definido e não é LIDER, remover todas as lideranças
-      if (typeof newRole === 'string' && newRole !== 'LIDER') {
-        await pool.query('DELETE FROM cell_leaders WHERE user_id = $1', [targetUserId]);
-      } else if (hasLeaderCellField) {
-        if (leaderCellId === null) {
-          // Remoção explícita de todas as lideranças
-          await pool.query('DELETE FROM cell_leaders WHERE user_id = $1', [targetUserId]);
-        } else if (typeof leaderCellId === 'string' && isValidUuid(leaderCellId)) {
-          // Inserção idempotente de uma liderança específica
-          try {
-            await pool.query(
-              'INSERT INTO cell_leaders (user_id, cell_id, created_at) VALUES ($1, $2, NOW()) ON CONFLICT (cell_id, user_id) DO NOTHING',
-              [targetUserId, leaderCellId]
-            );
-          } catch (e) {
-            // Tabela pode não existir em alguns ambientes; manter o restante da atualização
-            console.warn('[PUT] Falha ao inserir em cell_leaders', e?.message || e);
-          }
-        } else if (leaderCellId !== undefined) {
-          // Campo informado porém inválido
-          return res.status(400).json({ error: 'leader_cell_id inválido' });
+      // Passo 1: limpar qualquer liderança existente deste usuário
+      await pool.query('UPDATE cells SET leader_id = NULL WHERE leader_id = $1', [targetUserId]);
+
+      // Passo 2: atribuir nova liderança se aplicável
+      const roleUpperNoAccents = typeof newRole === 'string'
+        ? newRole.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        : null;
+      const shouldAssign =
+        (roleUpperNoAccents === 'LIDER') ||
+        (typeof newRole !== 'string' && hasLeaderCellField);
+
+      if (shouldAssign && typeof leaderCellId === 'string' && isValidUuid(leaderCellId)) {
+        const updLead = await pool.query(
+          'UPDATE cells SET leader_id = $1, updated_at = NOW() WHERE id = $2 RETURNING id',
+          [targetUserId, leaderCellId]
+        );
+        if (updLead.rows.length === 0) {
+          return res.status(404).json({ error: 'Célula para liderança não encontrada' });
         }
       }
+      // Se leader_cell_id for null ou role não for LIDER, nenhuma nova atribuição é feita (apenas limpeza).
     } catch (leaderErr) {
-      console.warn('[PUT] Erro ao processar liderança do usuário:', leaderErr?.message || leaderErr);
+      console.warn('[PUT] Erro ao processar liderança exclusiva via cells.leader_id:', leaderErr?.message || leaderErr);
       // Não falhar a atualização inteira por erro de liderança; segue fluxo normal
     }
 
@@ -1536,7 +1551,7 @@ app.get('/api/cells/:id', verifyToken, async (req, res) => {
   try {
     const cellId = req.params.id;
     const result = await pool.query(
-      `SELECT c.id, c.name, c.supervisor_id, c.created_at, c.updated_at,
+      `SELECT c.id, c.name, c.supervisor_id, c.leader_id, c.created_at, c.updated_at,
               s.name as supervisor_name
        FROM cells c
        LEFT JOIN users s ON c.supervisor_id = s.id
@@ -1546,7 +1561,34 @@ app.get('/api/cells/:id', verifyToken, async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Célula não encontrada' });
     }
-    return res.json(result.rows[0]);
+    const cell = result.rows[0];
+
+    // Montar leaders array: primeiro via tabela cell_leaders; fallback para cells.leader_id
+    let leaders = [];
+    try {
+      const leadRes = await pool.query(
+        `SELECT u.id, u.name
+         FROM cell_leaders cl
+         JOIN users u ON u.id = cl.user_id
+         WHERE cl.cell_id = $1`,
+        [cellId]
+      );
+      leaders = (leadRes.rows || []).map(r => ({ id: r.id, name: r.name }));
+    } catch (e) {
+      console.warn('Aviso: consulta de líderes falhou ou tabela ausente. Usando fallback.', e?.message || e);
+    }
+
+    if ((!leaders || leaders.length === 0) && cell.leader_id) {
+      try {
+        const lres = await pool.query('SELECT id, name FROM users WHERE id = $1', [cell.leader_id]);
+        if (lres.rows.length > 0) {
+          leaders = [{ id: lres.rows[0].id, name: lres.rows[0].name }];
+        }
+      } catch (e) {}
+    }
+
+    const { leader_id, ...rest } = cell;
+    return res.json({ ...rest, leaders });
   } catch (err) {
     console.error('Erro em GET /api/cells/:id', err);
     return res.status(500).json({ error: 'Erro ao obter célula' });
