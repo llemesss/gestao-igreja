@@ -12,9 +12,9 @@ export function OracaoView() {
   const [jaOrou, setJaOrou] = useState(false);
   
   // Store Zustand para o status de oração
-  const { setHasPrayedToday } = usePrayerStore();
+  const { hasPrayedToday, checkPrayerStatus, setHasPrayedToday } = usePrayerStore();
 
-  // Carrega os membros da célula quando o componente é montado
+  // Carrega os membros da célula e checa status de oração quando o componente é montado
   useEffect(() => {
     async function fetchMembros() {
       try {
@@ -29,12 +29,18 @@ export function OracaoView() {
       }
     }
     fetchMembros();
+    checkPrayerStatus();
   }, []);
+
+  // Sincroniza estado local com estado global
+  useEffect(() => {
+    setJaOrou(!!hasPrayedToday);
+  }, [hasPrayedToday]);
 
   // Função para o clique do botão
   async function handleRegisterPrayer() {
     // Se já orou hoje, mostra mensagem informativa
-    if (jaOrou) {
+    if (hasPrayedToday || jaOrou) {
       toast.info('Oração já registrada hoje!');
       return;
     }
@@ -113,9 +119,10 @@ export function OracaoView() {
       <section style={{ textAlign: 'center', padding: '20px' }}>
         <button 
           onClick={handleRegisterPrayer}
-          className="bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white font-semibold py-3 px-8 rounded-lg shadow-lg transform transition-all duration-200 hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-gray-400"
+          disabled={hasPrayedToday}
+          className="bg-gradient-to-r from-gray-800 to-black hover:from-gray-900 hover:to-gray-800 text-white font-semibold py-3 px-8 rounded-lg shadow-lg transform transition-all duration-200 hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {jaOrou ? 'Você já orou hoje' : 'Registrar Oração de Hoje'}
+          {hasPrayedToday || jaOrou ? 'Você já orou hoje' : 'Registrar Oração de Hoje'}
         </button>
       </section>
     </div>

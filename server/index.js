@@ -879,7 +879,7 @@ app.get('/api/user/my-cell', verifyToken, async (req, res) => {
   }
 });
 
-// Users: PUT /:id -> atualizar dados do usuário e (opcional) atribuições de células
+// Users: PUT /:id -> atualizar dados do usuário e (opcional) atribuições de células e liderança de célula
 app.put('/api/users/:id', verifyToken, async (req, res) => {
   try {
     const { role } = req.user;
@@ -897,6 +897,8 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
     }
 
     const { name, email, role: newRole, cell_id, cell_ids, funcao_na_celula } = req.body || {};
+    const hasLeaderCellField = Object.prototype.hasOwnProperty.call((req.body || {}), 'leader_cell_id');
+    const leaderCellId = hasLeaderCellField ? (req.body?.leader_cell_id ?? null) : undefined;
 
     // Controle de atualização de funcao_na_celula
     const wantUpdateFuncao = Object.prototype.hasOwnProperty.call((req.body || {}), 'funcao_na_celula');
@@ -979,6 +981,40 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
       // Define este usuário como supervisor para cada célula informada
       const assignSql = `UPDATE cells SET supervisor_id = $1 WHERE id = ANY($2::uuid[])`;
       await pool.query(assignSql, [targetUserId, cell_ids]);
+    }
+
+    // Liderança: processar campo leader_cell_id quando presente
+    // Regras:
+    // - Se leader_cell_id === null OU role foi alterado para algo diferente de 'LIDER', remover todas as lideranças deste usuário
+    // - Se leader_cell_id for uma UUID válida, inserir (idempotente) a liderança (user_id, cell_id)
+    // - Caso nenhum leader_cell_id seja enviado, não alteramos a liderança existente (a menos que role != LIDER, conforme regra acima)
+    try {
+      // Se o papel foi explicitamente definido e não é LIDER, remover todas as lideranças
+      if (typeof newRole === 'string' && newRole !== 'LIDER') {
+        await pool.query('DELETE FROM cell_leaders WHERE user_id = $1', [targetUserId]);
+      } else if (hasLeaderCellField) {
+        if (leaderCellId === null) {
+          // Remoção explícita de todas as lideranças
+          await pool.query('DELETE FROM cell_leaders WHERE user_id = $1', [targetUserId]);
+        } else if (typeof leaderCellId === 'string' && isValidUuid(leaderCellId)) {
+          // Inserção idempotente de uma liderança específica
+          try {
+            await pool.query(
+              'INSERT INTO cell_leaders (user_id, cell_id, created_at) VALUES ($1, $2, NOW()) ON CONFLICT (cell_id, user_id) DO NOTHING',
+              [targetUserId, leaderCellId]
+            );
+          } catch (e) {
+            // Tabela pode não existir em alguns ambientes; manter o restante da atualização
+            console.warn('[PUT] Falha ao inserir em cell_leaders', e?.message || e);
+          }
+        } else if (leaderCellId !== undefined) {
+          // Campo informado porém inválido
+          return res.status(400).json({ error: 'leader_cell_id inválido' });
+        }
+      }
+    } catch (leaderErr) {
+      console.warn('[PUT] Erro ao processar liderança do usuário:', leaderErr?.message || leaderErr);
+      // Não falhar a atualização inteira por erro de liderança; segue fluxo normal
     }
 
     return res.json({ message: 'Atualização concluída', user: updatedUser });
@@ -1680,12 +1716,133 @@ app.get('/api/cells/my-cell/members', verifyToken, async (req, res) => {
 });
 
 // Alias solicitado pelo cliente: /api/info/my-cell/members (mapeia para a mesma lógica)
-// Simplificação temporária: resposta estática para isolar falhas de inicialização/queries
 app.get('/api/info/my-cell/members', verifyToken, async (req, res) => {
   try {
-    return res.status(200).json({ status: 'API FUNCIONA', test: true });
+    const { userId } = req.user;
+    if (!isValidUuid(userId)) {
+      console.warn('[UUID] userId inválido em GET /api/info/my-cell/members', { userId });
+      return res.status(404).json({ error: 'Célula do usuário não encontrada' });
+    }
+
+    const userCellRes = await pool.query('SELECT cell_id FROM users WHERE id = $1', [userId]);
+    const cellId = userCellRes.rows[0]?.cell_id;
+    if (!cellId) {
+      return res.status(404).json({ error: 'Célula do usuário não encontrada' });
+    }
+
+    if (supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('users')
+          .select('id,name,email,role,phone,whatsapp,birth_date,gender,marital_status,oikos1,oikos2,created_at')
+          .eq('cell_id', cellId)
+          .order('name', { ascending: true });
+        if (error) {
+          console.error('[Supabase] Falha na query de membros via SDK (info alias):', error?.message || error);
+        } else if (Array.isArray(data)) {
+          const rows = (data || []).map((r) => {
+            const oikos1Name = r.oikos1 || null;
+            const oikos2Name = r.oikos2 || null;
+            return {
+              ...r,
+              oikos_relacao_1: oikos1Name ? { nome: oikos1Name } : null,
+              oikos_relacao_2: oikos2Name ? { nome: oikos2Name } : null,
+              oikos_1: oikos1Name ? { nome: oikos1Name } : null,
+              oikos_2: oikos2Name ? { nome: oikos2Name } : null,
+            };
+          });
+          return res.json(rows);
+        }
+      } catch (sdkErr) {
+        console.error('[Supabase] Erro inesperado via SDK (info alias):', sdkErr?.message || sdkErr);
+      }
+    }
+
+    let hasOikosTable = false;
+    let oikos1Fk = null;
+    let oikos2Fk = null;
+    try {
+      const checkRes = await pool.query(`
+        SELECT 
+          EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'oikos') AS has_oikos,
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'oikos1_id') AS has_oikos1_id,
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'oikos_1_id') AS has_oikos_1_id,
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'oikos2_id') AS has_oikos2_id,
+          EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'oikos_2_id') AS has_oikos_2_id
+      `);
+      const check = checkRes.rows[0] || {};
+      hasOikosTable = Boolean(check.has_oikos);
+      if (check.has_oikos1_id) oikos1Fk = 'oikos1_id';
+      else if (check.has_oikos_1_id) oikos1Fk = 'oikos_1_id';
+      if (check.has_oikos2_id) oikos2Fk = 'oikos2_id';
+      else if (check.has_oikos_2_id) oikos2Fk = 'oikos_2_id';
+    } catch (e) {
+      console.warn('[DEBUG] Falha ao detectar esquema Oikós (info alias), usando fallback de colunas texto.', e?.message || e);
+      hasOikosTable = false;
+      oikos1Fk = null;
+      oikos2Fk = null;
+    }
+
+    let hasFuncaoNaCelula = false;
+    try {
+      const colCheck = await pool.query(
+        `SELECT EXISTS (
+           SELECT 1 FROM information_schema.columns 
+           WHERE table_name = 'users' AND column_name = 'funcao_na_celula'
+         ) AS has_col`
+      );
+      hasFuncaoNaCelula = Boolean(colCheck.rows?.[0]?.has_col);
+    } catch (e) {
+      console.warn('[DEBUG] Falha ao verificar coluna users.funcao_na_celula (info alias):', e?.message || e);
+    }
+
+    const funcaoSelect = hasFuncaoNaCelula ? 'u.funcao_na_celula' : "NULL::text AS funcao_na_celula";
+
+    let sqlMembers;
+    if (hasOikosTable && oikos1Fk && oikos2Fk) {
+      sqlMembers = `
+        SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+               u.birth_date, u.gender, u.marital_status,
+               ${funcaoSelect},
+               u.${oikos1Fk} AS oikos1_id, u.${oikos2Fk} AS oikos2_id,
+               o1.name AS oikos1_name, o2.name AS oikos2_name,
+               u.created_at
+        FROM users u
+        LEFT JOIN oikos o1 ON o1.id = u.${oikos1Fk}
+        LEFT JOIN oikos o2 ON o2.id = u.${oikos2Fk}
+        WHERE u."cell_id" = $1
+        ORDER BY u.name ASC
+      `;
+    } else {
+      sqlMembers = `
+        SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+               u.birth_date, u.gender, u.marital_status,
+               ${funcaoSelect},
+               u.oikos1, u.oikos2,
+               u.created_at
+        FROM users u
+        WHERE u."cell_id" = $1
+        ORDER BY u.name ASC
+      `;
+    }
+
+    const result = await pool.query(sqlMembers, [cellId]);
+    const rows = (result.rows || []).map((r) => {
+      const { password_hash, ...clean } = r || {};
+      const oikos1Name = clean.oikos1_name || clean.oikos1 || null;
+      const oikos2Name = clean.oikos2_name || clean.oikos2 || null;
+      return {
+        ...clean,
+        oikos_relacao_1: oikos1Name ? { nome: oikos1Name } : null,
+        oikos_relacao_2: oikos2Name ? { nome: oikos2Name } : null,
+        oikos_1: oikos1Name ? { nome: oikos1Name } : null,
+        oikos_2: oikos2Name ? { nome: oikos2Name } : null,
+      };
+    });
+
+    return res.json(rows);
   } catch (error) {
-    console.error('[ERRO] /api/info/my-cell/members (simplificada)', error?.message || error);
+    console.error('[ERRO] /api/info/my-cell/members', error?.message || error);
     return res.status(500).send({ message: 'Falha interna do servidor.' });
   }
 });

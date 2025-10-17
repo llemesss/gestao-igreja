@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Heart, Sparkles, Users, User, X } from 'lucide-react';
 import { api, apiMethods } from '@/lib/api';
 import { Modal } from '@/components/ui/Modal';
+import { usePrayerStore } from '@/lib/store';
 
 interface Member {
   id: string;
@@ -30,10 +31,12 @@ export default function PrayerModal({ isOpen, onClose, onRegister }: PrayerModal
   const [isRegistering, setIsRegistering] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(false);
+  const { hasPrayedToday, checkPrayerStatus, setHasPrayedToday } = usePrayerStore();
 
   useEffect(() => {
     if (isOpen) {
       loadCellMembers();
+      checkPrayerStatus();
     }
   }, [isOpen]);
 
@@ -57,6 +60,7 @@ export default function PrayerModal({ isOpen, onClose, onRegister }: PrayerModal
     setIsRegistering(true);
     try {
       await onRegister();
+      setHasPrayedToday(true);
       onClose();
     } catch (error) {
       console.error('Erro ao registrar oração:', error);
@@ -146,7 +150,7 @@ export default function PrayerModal({ isOpen, onClose, onRegister }: PrayerModal
         </button>
         <button
           onClick={handleRegister}
-          disabled={isRegistering}
+          disabled={isRegistering || hasPrayedToday}
           className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {isRegistering ? (
@@ -157,7 +161,7 @@ export default function PrayerModal({ isOpen, onClose, onRegister }: PrayerModal
           ) : (
             <>
               <Heart size={16} />
-              Registrar Oração
+              {hasPrayedToday ? 'Oração Já Registrada Hoje' : 'Registrar Oração'}
             </>
           )}
         </button>

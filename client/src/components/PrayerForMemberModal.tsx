@@ -5,6 +5,7 @@ import { Heart, Users, Search, X } from 'lucide-react';
 import { api, apiMethods } from '@/lib/api';
 import { toast } from 'react-hot-toast';
 import { Modal } from '@/components/ui/Modal';
+import { usePrayerStore } from '@/lib/store';
 
 interface Member {
   id: string;
@@ -33,10 +34,12 @@ export default function PrayerForMemberModal({ isOpen, onClose }: PrayerForMembe
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [prayerNote, setPrayerNote] = useState('');
   const [registering, setRegistering] = useState(false);
+  const { hasPrayedToday, checkPrayerStatus, setHasPrayedToday } = usePrayerStore();
 
   useEffect(() => {
     if (isOpen) {
       loadMembers();
+      checkPrayerStatus();
     }
   }, [isOpen]);
 
@@ -62,12 +65,16 @@ export default function PrayerForMemberModal({ isOpen, onClose }: PrayerForMembe
   const handleRegisterPrayer = async () => {
     if (!selectedMember) return;
 
+    if (hasPrayedToday) {
+      toast('Oração já registrada hoje!', { icon: 'ℹ️' });
+      return;
+    }
+
     setRegistering(true);
     try {
-      // Aqui você pode implementar a lógica para registrar oração por um membro específico
-      // Por enquanto, vamos apenas registrar a oração pessoal
       await apiMethods.prayers.registerPrayer();
       toast.success(`Oração registrada por ${selectedMember.name}!`);
+      setHasPrayedToday(true);
       onClose();
       resetModal();
     } catch (error: any) {
@@ -187,7 +194,7 @@ export default function PrayerForMemberModal({ isOpen, onClose }: PrayerForMembe
         </button>
         <button
           onClick={handleRegisterPrayer}
-          disabled={!selectedMember || registering}
+          disabled={!selectedMember || registering || hasPrayedToday}
           className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:from-blue-600 hover:to-purple-600 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {registering ? (
@@ -198,7 +205,7 @@ export default function PrayerForMemberModal({ isOpen, onClose }: PrayerForMembe
           ) : (
             <>
               <Heart size={16} />
-              Registrar Oração
+              {hasPrayedToday ? 'Oração Já Registrada Hoje' : 'Registrar Oração'}
             </>
           )}
         </button>
