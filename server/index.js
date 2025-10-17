@@ -976,11 +976,20 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
       updatedUser = resUser.rows[0] || null;
     }
 
-    // Atribuição múltipla de supervisão de células (opcional)
-    if (Array.isArray(cell_ids) && cell_ids.length > 0) {
-      // Define este usuário como supervisor para cada célula informada
-      const assignSql = `UPDATE cells SET supervisor_id = $1 WHERE id = ANY($2::uuid[])`;
-      await pool.query(assignSql, [targetUserId, cell_ids]);
+    // Lógica de supervisão de células: Limpar e Atribuir em dois passos
+    if (Array.isArray(cell_ids)) {
+      // Passo 1: limpar TODAS as células onde este usuário é o supervisor
+      await pool.query(
+        "UPDATE cells SET supervisor_id = NULL WHERE supervisor_id = $1",
+        [targetUserId]
+      );
+      // Passo 2: atribuir novamente SOMENTE às células selecionadas
+      if (cell_ids.length > 0) {
+        await pool.query(
+          "UPDATE cells SET supervisor_id = $1 WHERE id = ANY($2::uuid[])",
+          [targetUserId, cell_ids]
+        );
+      }
     }
 
     // Liderança: processar campo leader_cell_id quando presente
