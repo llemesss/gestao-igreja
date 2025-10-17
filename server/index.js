@@ -273,6 +273,28 @@ const ensureSchema = async () => {
         CREATE INDEX IF NOT EXISTS idx_daily_prayer_user
           ON daily_prayer_log(user_id);
       `);
+
+      // Auditoria: registrar ações críticas com before/after e metadados
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS audit_logs (
+          id UUID PRIMARY KEY,
+          performed_by UUID,
+          target_user_id UUID,
+          action TEXT NOT NULL,
+          details JSONB,
+          ip VARCHAR(64),
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(performed_by);
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs(target_user_id);
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at);
+      `);
     } else {
       console.warn('[SCHEMA] Em Pooling (6543): pulando DDL no startup.');
     }
@@ -976,8 +998,20 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
       updatedUser = resUser.rows[0] || null;
     }
 
-    // Lógica de supervisão de células: Limpar e Atribuir em dois passos
+    // Lógica de supervisão de células: Limpar e Atribuir em dois passos + Auditoria
     if (Array.isArray(cell_ids)) {
+      // BEFORE: coletar células supervisionadas antes da alteração
+      let beforeCells = [];
+      try {
+        const beforeRes = await pool.query(
+          'SELECT id FROM cells WHERE supervisor_id = $1',
+          [targetUserId]
+        );
+        beforeCells = (beforeRes.rows || []).map(r => r.id);
+      } catch (e) {
+        console.warn('[AUDIT] Falha ao coletar BEFORE de células supervisionadas:', e?.message || e);
+      }
+
       // Passo 1: limpar TODAS as células onde este usuário é o supervisor
       await pool.query(
         "UPDATE cells SET supervisor_id = NULL WHERE supervisor_id = $1",
@@ -989,6 +1023,43 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
           "UPDATE cells SET supervisor_id = $1 WHERE id = ANY($2::uuid[])",
           [targetUserId, cell_ids]
         );
+      }
+
+      // AFTER: coletar células supervisionadas após a alteração
+      let afterCells = [];
+      try {
+        const afterRes = await pool.query(
+          'SELECT id FROM cells WHERE supervisor_id = $1',
+          [targetUserId]
+        );
+        afterCells = (afterRes.rows || []).map(r => r.id);
+      } catch (e) {
+        console.warn('[AUDIT] Falha ao coletar AFTER de células supervisionadas:', e?.message || e);
+      }
+
+      // Registrar auditoria
+      try {
+        const auditId = uuidv4();
+        const actorId = req.user?.userId || null;
+        const ip = String((req.headers['x-forwarded-for'] || req.ip || '')).split(',')[0].trim();
+        const details = {
+          cell_supervision: {
+            before: beforeCells,
+            assigned_input: Array.isArray(cell_ids) ? cell_ids : [],
+            after: afterCells,
+          },
+          actor_role: req.user?.role || null,
+          target_role: typeof newRole === 'string' ? newRole : (updatedUser?.role || null),
+          route: req.originalUrl,
+          method: req.method,
+          timestamp: new Date().toISOString(),
+        };
+        await pool.query(
+          'INSERT INTO audit_logs (id, performed_by, target_user_id, action, details, ip) VALUES ($1, $2, $3, $4, $5::jsonb, $6)',
+          [auditId, actorId, targetUserId, 'user.supervision.update', JSON.stringify(details), ip]
+        );
+      } catch (e) {
+        console.warn('[AUDIT] Falha ao inserir audit_logs:', e?.message || e);
       }
     }
 
