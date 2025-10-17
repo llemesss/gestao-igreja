@@ -312,11 +312,16 @@ export default function UsuariosPage() {
       // Incluir atribuição de liderança quando o papel for LIDER
       if (role === 'LIDER') {
         updateData.leader_cell_id = cellId || null;
+        updateData.celulaLideradaId = cellId || null; // alias explícito para debug e compatibilidade
       } else {
         // Se não for líder, garantir remoção de qualquer liderança pré-existente
         updateData.leader_cell_id = null;
+        updateData.celulaLideradaId = null;
       }
-      
+
+      console.log('=== DEBUG UsuariosPage ===');
+      console.log('Payload Enviado:', updateData);
+
       await apiMethods.users.update(userId, updateData);
       
       // Atualizar a lista local

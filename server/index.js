@@ -934,8 +934,17 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
     }
 
     const { name, email, role: newRole, cell_id, cell_ids, funcao_na_celula } = req.body || {};
-    const hasLeaderCellField = Object.prototype.hasOwnProperty.call((req.body || {}), 'leader_cell_id');
-    const leaderCellId = hasLeaderCellField ? (req.body?.leader_cell_id ?? null) : undefined;
+    const hasLeaderCellField = Object.prototype.hasOwnProperty.call((req.body || {}), 'leader_cell_id')
+      || Object.prototype.hasOwnProperty.call((req.body || {}), 'celulaLideradaId');
+    const leaderCellId = hasLeaderCellField
+      ? (req.body?.leader_cell_id ?? req.body?.celulaLideradaId ?? null)
+      : undefined;
+    console.log('[PUT /api/users/:id] liderança payload', {
+      newRole,
+      leader_cell_id: req.body?.leader_cell_id,
+      celulaLideradaId: req.body?.celulaLideradaId,
+      resolvedLeaderCellId: leaderCellId,
+    });
 
     // Controle de atualização de funcao_na_celula
     const wantUpdateFuncao = Object.prototype.hasOwnProperty.call((req.body || {}), 'funcao_na_celula');

@@ -114,6 +114,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, cells, onCl
         cell_id?: string; 
         cell_ids?: string[];
         leader_cell_id?: string | null;
+        celulaLideradaId?: string | null; // campo redundante para compatibilidade e auditoria
       } = {
         name: user.name,     // Campo obrigatório
         email: user.email,   // Campo obrigatório
@@ -134,12 +135,15 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, cells, onCl
           return;
         }
         updateData.leader_cell_id = leaderCellId;
+        updateData.celulaLideradaId = leaderCellId;
       } else {
         // Papéis que não sejam LIDER removem qualquer liderança existente
         updateData.leader_cell_id = null;
+        updateData.celulaLideradaId = null;
       }
       
       console.log('=== DEBUG EditUserModal ===');
+      console.log('Payload Enviado:', updateData);
       console.log('Dados completos sendo enviados:', updateData);
       
       await onSave(user.id, updateData);
@@ -615,96 +619,73 @@ export default function GerenciarUsuariosView() {
                 ))}
               </tbody>
             </table>
-          </div>
 
-          {/* Paginação */}
-          <div className="flex items-center justify-between mt-6">
-            <div className="text-sm text-gray-700">
-              Mostrando {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} a{' '}
-              {Math.min(
-                (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-                table.getFilteredRowModel().rows.length
-              )}{' '}
-              de {table.getFilteredRowModel().rows.length} usuários
-            </div>
-            <div className="flex items-center space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => table.previousPage()}
-                disabled={!table.getCanPreviousPage()}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm text-gray-700">
+            {/* Paginação */}
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-sm text-gray-600">
                 Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => table.nextPage()}
-                disabled={!table.getCanNextPage()}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => table.previousPage()}
+                  disabled={!table.getCanPreviousPage()}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => table.nextPage()}
+                  disabled={!table.getCanNextPage()}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Modal de Edição */}
-      <EditUserModal
-        isOpen={editModalOpen}
-        user={selectedUser}
-        cells={cells}
-        onClose={() => {
-          setEditModalOpen(false);
-          setSelectedUser(null);
-        }}
-        onSave={handleSaveUser}
+      {/* Modal de edição */}
+      <EditUserModal 
+        isOpen={editModalOpen} 
+        user={selectedUser} 
+        cells={cells} 
+        onClose={() => setEditModalOpen(false)} 
+        onSave={handleSaveUser} 
       />
 
       {/* Modal de Detalhes do Membro */}
-       <MemberDetailModal
-         member={userForDetails}
-         isOpen={detailModalOpen}
-         onClose={() => {
-           setDetailModalOpen(false);
-           setUserForDetails(null);
-         }}
-       />
+      {detailModalOpen && userForDetails && (
+        <MemberDetailModal
+          isOpen={detailModalOpen}
+          onClose={() => {
+            setDetailModalOpen(false);
+            setUserForDetails(null);
+          }}
+          userId={userForDetails.id}
+          userName={userForDetails.name}
+          userEmail={userForDetails.email}
+          userRole={userForDetails.role}
+        />
+      )}
 
-       {/* Modal de Confirmação de Exclusão */}
-       {userToDelete && (
-         <div className="fixed inset-0 backdrop-blur-sm bg-white/30 flex items-center justify-center z-50">
-           <div className="bg-gray-700 rounded-lg p-6 max-w-md w-full mx-4 border border-gray-600 shadow-lg">
-             <h3 className="text-lg font-semibold text-gray-100 mb-4">
-               Confirmar Exclusão Permanente
-             </h3>
-             <p className="text-gray-300 mb-2">
-               Você tem certeza que deseja excluir permanentemente o usuário{' '}
-               <strong className="text-gray-100">{userToDelete.name}</strong>?
-             </p>
-             <p className="text-red-300 mb-6 font-semibold">
-               ⚠️ Esta ação não poderá ser desfeita e removerá todos os dados do usuário!
-             </p>
-             <div className="flex justify-end space-x-3">
-               <Button
-                 variant="outline"
-                 onClick={() => setUserToDelete(null)}
-               >
-                 Cancelar
-               </Button>
-               <Button
-                 className="bg-red-100 text-red-800 hover:bg-red-200"
-                 onClick={handleConfirmDelete}
-               >
-                 Sim, Excluir Permanentemente
-               </Button>
-             </div>
-           </div>
-         </div>
-       )}
-     </div>
-   );
- }
+      {/* Modal de confirmação de exclusão */}
+      {userToDelete && (
+        <Modal isOpen={!!userToDelete} onClose={() => setUserToDelete(null)} title="Excluir Usuário">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700">
+              Tem certeza que deseja excluir permanentemente o usuário <strong>{userToDelete.name}</strong>? Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <Button variant="outline" onClick={() => setUserToDelete(null)}>Cancelar</Button>
+              <Button className="bg-red-600 hover:bg-red-700" onClick={handleConfirmDelete}>Excluir</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
