@@ -6,6 +6,7 @@ import { Button, Input, Card, CardHeader, CardTitle, CardContent } from '@/compo
 import { api, apiMethods } from '@/lib/api';
 import { toast } from 'sonner';
 import { auth } from '@/lib/auth';
+import { Eye, EyeOff } from 'lucide-react';
 
 function LoginForm() {
   const router = useRouter();
@@ -17,6 +18,7 @@ function LoginForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     const message = searchParams.get('message');
@@ -127,16 +129,27 @@ function LoginForm() {
             disabled={loading}
           />
 
-          <Input
-            label="Senha"
-            type="password"
-            name="password"
-            value={formData.password}
-            onChange={handleChange}
-            error={errors.password}
-            placeholder="Sua senha"
-            disabled={loading}
-          />
+          <div className="relative">
+            <Input
+              label="Senha"
+              type={showPassword ? 'text' : 'password'}
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              error={errors.password}
+              placeholder="Sua senha"
+              disabled={loading}
+            />
+            <button
+              type="button"
+              aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute right-3 top-8 text-gray-500 hover:text-gray-700"
+              disabled={loading}
+            >
+              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            </button>
+          </div>
 
           <Button
             type="submit"

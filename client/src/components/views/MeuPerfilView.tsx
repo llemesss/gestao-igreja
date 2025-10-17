@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
-import { api } from '@/lib/api';
+import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
+import { api, apiMethods } from '@/lib/api';
 
 interface ProfileFormData {
   name: string;
@@ -44,6 +46,11 @@ const estadosDoBrasil = [
 function MeuPerfilView() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Evitar setState após desmontagem
   const isMounted = useRef(true);
@@ -159,8 +166,19 @@ function MeuPerfilView() {
   }
 
   return (
+    <>
     <div className="max-w-4xl mx-auto p-6">
       <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Meu Perfil</h1>
+          <button
+            type="button"
+            onClick={() => setIsChangePasswordOpen(true)}
+            className="px-4 py-2 bg-gray-900 text-white rounded-md hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
+          >
+            Alterar Senha
+          </button>
+        </div>
         <h1 className="text-2xl font-bold text-gray-900 mb-6">Meu Perfil</h1>
         
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -550,6 +568,75 @@ function MeuPerfilView() {
         </form>
       </div>
     </div>
+
+    {/* Modal Alterar Senha */}
+    <Modal isOpen={isChangePasswordOpen} onClose={() => setIsChangePasswordOpen(false)} title="Alterar Senha">
+      <div className="space-y-4">
+        <Input
+          type="password"
+          label="Senha Atual"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          placeholder="Digite sua senha atual"
+        />
+        <Input
+          type="password"
+          label="Nova Senha"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          placeholder="Digite a nova senha"
+        />
+        <Input
+          type="password"
+          label="Confirmar Nova Senha"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          placeholder="Confirme a nova senha"
+        />
+    
+        <div className="flex justify-end gap-3 pt-2">
+          <button
+            type="button"
+            onClick={() => setIsChangePasswordOpen(false)}
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={isChangingPassword}
+            onClick={async () => {
+              if (!currentPassword || !newPassword || !confirmPassword) {
+                toast.error('Preencha todos os campos.');
+                return;
+              }
+              if (newPassword !== confirmPassword) {
+                toast.error('As senhas não coincidem.');
+                return;
+              }
+              try {
+                setIsChangingPassword(true);
+                await apiMethods.users.changePassword({ currentPassword, newPassword });
+                toast.success('Senha alterada com sucesso!');
+                setIsChangePasswordOpen(false);
+                setCurrentPassword('');
+                setNewPassword('');
+                setConfirmPassword('');
+              } catch (error: any) {
+                const msg = error?.response?.data?.error || error?.response?.data?.message || 'Não foi possível alterar a senha';
+                toast.error(msg);
+              } finally {
+                setIsChangingPassword(false);
+              }
+            }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          >
+            {isChangingPassword ? 'Alterando...' : 'Alterar Senha'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+    </>
   );
 }
 

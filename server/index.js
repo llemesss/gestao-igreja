@@ -1232,6 +1232,55 @@ app.put('/api/me', verifyToken, async (req, res) => {
   }
 });
 
+// Alterar senha do usuário logado
+app.put('/api/users/change-password', verifyToken, async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const { currentPassword, newPassword } = req.body || {};
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Senha atual e nova senha são obrigatórias' });
+    }
+
+    // Carregar o usuário atual para verificar a senha
+    const userRes = await pool.query('SELECT id, password_hash, email FROM users WHERE id = $1 LIMIT 1', [userId]);
+    const user = userRes.rows[0];
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    const ok = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!ok) {
+      return res.status(401).json({ error: 'Senha atual inválida' });
+    }
+
+    // Atualizar hash localmente para consistência
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [newHash, userId]);
+
+    // Se Supabase estiver configurado, atualiza a senha lá também
+    if (supabaseClient) {
+      try {
+        // updateUserById exige service role
+        const { error: updateError } = await supabaseClient.auth.admin.updateUserById(userId, {
+          password: newPassword,
+        });
+        if (updateError) {
+          console.warn('[Supabase] Falha ao atualizar senha via admin.updateUserById:', updateError?.message || updateError);
+          // Não falha duro: já atualizamos localmente; reporta aviso
+        }
+      } catch (e) {
+        console.warn('[Supabase] Exceção ao atualizar senha:', e?.message || e);
+      }
+    }
+
+    return res.json({ message: 'Senha atualizada com sucesso' });
+  } catch (err) {
+    console.error('Erro em PUT /api/users/change-password', err);
+    return res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
 // Prayers: registrar oração diária
 app.post('/api/prayers/register', verifyToken, async (req, res) => {
   try {

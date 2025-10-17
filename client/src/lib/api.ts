@@ -140,6 +140,11 @@ const usersApi = {
     const response = await apiClient.get(`/users/${userId}/cell-assignments`);
     return response.data;
   },
+
+  changePassword: async (data: { currentPassword: string; newPassword: string }) => {
+    const response = await apiClient.put('/users/change-password', data);
+    return response.data;
+  },
 };
 
 // Funções para células
