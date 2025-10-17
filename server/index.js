@@ -936,16 +936,20 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
     const { name, email, cell_id, cell_ids, funcao_na_celula } = req.body || {};
     const incomingRoleRaw = (req.body?.role ?? req.body?.selectedRole ?? null);
     const newRole = typeof incomingRoleRaw === 'string' ? incomingRoleRaw : null;
-    const hasLeaderCellField = Object.prototype.hasOwnProperty.call((req.body || {}), 'leader_cell_id')
+
+    // Suporte explícito ao nome exato enviado pelo frontend: `celulalideradaid`
+    const hasLeaderCellField = Object.prototype.hasOwnProperty.call((req.body || {}), 'celulalideradaid')
+      || Object.prototype.hasOwnProperty.call((req.body || {}), 'leader_cell_id')
       || Object.prototype.hasOwnProperty.call((req.body || {}), 'celulaLideradaId')
       || Object.prototype.hasOwnProperty.call((req.body || {}), 'leaderCellId');
     const leaderCellId = hasLeaderCellField
-      ? (req.body?.leader_cell_id ?? req.body?.celulaLideradaId ?? req.body?.leaderCellId ?? null)
+      ? (req.body?.celulalideradaid ?? req.body?.leader_cell_id ?? req.body?.celulaLideradaId ?? req.body?.leaderCellId ?? null)
       : undefined;
     console.log('[PUT /api/users/:id] liderança payload', {
       newRole,
       selectedRole: req.body?.selectedRole,
       leader_cell_id: req.body?.leader_cell_id,
+      celulalideradaid: req.body?.celulalideradaid,
       celulaLideradaId: req.body?.celulaLideradaId,
       leaderCellId: req.body?.leaderCellId,
       resolvedLeaderCellId: leaderCellId,
