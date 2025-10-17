@@ -933,16 +933,21 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Dados ou ID de usuário inválido para atualização.' });
     }
 
-    const { name, email, role: newRole, cell_id, cell_ids, funcao_na_celula } = req.body || {};
+    const { name, email, cell_id, cell_ids, funcao_na_celula } = req.body || {};
+    const incomingRoleRaw = (req.body?.role ?? req.body?.selectedRole ?? null);
+    const newRole = typeof incomingRoleRaw === 'string' ? incomingRoleRaw : null;
     const hasLeaderCellField = Object.prototype.hasOwnProperty.call((req.body || {}), 'leader_cell_id')
-      || Object.prototype.hasOwnProperty.call((req.body || {}), 'celulaLideradaId');
+      || Object.prototype.hasOwnProperty.call((req.body || {}), 'celulaLideradaId')
+      || Object.prototype.hasOwnProperty.call((req.body || {}), 'leaderCellId');
     const leaderCellId = hasLeaderCellField
-      ? (req.body?.leader_cell_id ?? req.body?.celulaLideradaId ?? null)
+      ? (req.body?.leader_cell_id ?? req.body?.celulaLideradaId ?? req.body?.leaderCellId ?? null)
       : undefined;
     console.log('[PUT /api/users/:id] liderança payload', {
       newRole,
+      selectedRole: req.body?.selectedRole,
       leader_cell_id: req.body?.leader_cell_id,
       celulaLideradaId: req.body?.celulaLideradaId,
+      leaderCellId: req.body?.leaderCellId,
       resolvedLeaderCellId: leaderCellId,
     });
 
@@ -1090,35 +1095,54 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
       }
     }
 
-    // Liderança exclusiva via cells.leader_id
+    // Liderança exclusiva via cells.leader_id (transacional)
     // Regras:
     // - Sempre limpar todas as células onde este usuário era líder
     // - Se newRole === 'LIDER' e leader_cell_id for UUID válida, atribuir como leader_id desta célula
     try {
-      // Passo 1: limpar qualquer liderança existente deste usuário
-      await pool.query('UPDATE cells SET leader_id = NULL WHERE leader_id = $1', [targetUserId]);
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
 
-      // Passo 2: atribuir nova liderança se aplicável
-      const roleUpperNoAccents = typeof newRole === 'string'
-        ? newRole.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        : null;
-      const shouldAssign =
-        (roleUpperNoAccents === 'LIDER') ||
-        (typeof newRole !== 'string' && hasLeaderCellField);
+        // Passo 1: limpar qualquer liderança existente deste usuário
+        await client.query('UPDATE cells SET leader_id = NULL WHERE leader_id = $1', [targetUserId]);
 
-      if (shouldAssign && typeof leaderCellId === 'string' && isValidUuid(leaderCellId)) {
-        const updLead = await pool.query(
-          'UPDATE cells SET leader_id = $1, updated_at = NOW() WHERE id = $2 RETURNING id',
-          [targetUserId, leaderCellId]
-        );
-        if (updLead.rows.length === 0) {
-          return res.status(404).json({ error: 'Célula para liderança não encontrada' });
+        // Passo 2: atribuir nova liderança se aplicável
+        const roleUpperNoAccents = typeof newRole === 'string'
+          ? newRole.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          : null;
+        const shouldAssign =
+          (roleUpperNoAccents === 'LIDER') ||
+          (typeof newRole !== 'string' && hasLeaderCellField);
+
+        let assignedCellId = null;
+        if (shouldAssign && typeof leaderCellId === 'string' && isValidUuid(leaderCellId)) {
+          const updLead = await client.query(
+            'UPDATE cells SET leader_id = $1, updated_at = NOW() WHERE id = $2 RETURNING id',
+            [targetUserId, leaderCellId]
+          );
+          if (updLead.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Célula para liderança não encontrada' });
+          }
+          assignedCellId = updLead.rows[0].id;
         }
+
+        await client.query('COMMIT');
+        console.log('[PUT /api/users/:id] liderança aplicada (transação)', {
+          targetUserId,
+          roleUpperNoAccents,
+          assigned: Boolean(assignedCellId),
+          leaderCellId: leaderCellId || null,
+        });
+      } catch (leaderTxnErr) {
+        await client.query('ROLLBACK');
+        console.warn('[PUT] Erro transacional ao atualizar liderança via cells.leader_id:', leaderTxnErr?.message || leaderTxnErr);
+      } finally {
+        client.release();
       }
-      // Se leader_cell_id for null ou role não for LIDER, nenhuma nova atribuição é feita (apenas limpeza).
-    } catch (leaderErr) {
-      console.warn('[PUT] Erro ao processar liderança exclusiva via cells.leader_id:', leaderErr?.message || leaderErr);
-      // Não falhar a atualização inteira por erro de liderança; segue fluxo normal
+    } catch (leaderConnErr) {
+      console.warn('[PUT] Falha ao obter client para liderança:', leaderConnErr?.message || leaderConnErr);
     }
 
     return res.json({ message: 'Atualização concluída', user: updatedUser });
@@ -1607,7 +1631,17 @@ app.get('/api/cells/list', verifyToken, async (req, res) => {
 // Cells: obter detalhe da célula
 app.get('/api/cells/:id', verifyToken, async (req, res) => {
   try {
-    const cellId = req.params.id;
+    const cellIdRaw = req.params.id;
+    const cellId = typeof cellIdRaw === 'string' ? cellIdRaw.trim() : '';
+    const actorId = req.user?.userId || null;
+    const actorRole = req.user?.role || null;
+    console.log('[GET /api/cells/:id] request', { cellId, actorId, actorRole });
+
+    if (!cellId || !isValidUuid(cellId)) {
+      console.warn('[GET /api/cells/:id] ID inválido', { cellId });
+      return res.status(400).json({ error: 'ID de célula inválido' });
+    }
+
     const result = await pool.query(
       `SELECT c.id, c.name, c.supervisor_id, c.leader_id, c.created_at, c.updated_at,
               s.name as supervisor_name
@@ -1617,6 +1651,7 @@ app.get('/api/cells/:id', verifyToken, async (req, res) => {
       [cellId]
     );
     if (result.rows.length === 0) {
+      console.warn('[GET /api/cells/:id] Célula não encontrada', { cellId });
       return res.status(404).json({ error: 'Célula não encontrada' });
     }
     const cell = result.rows[0];
