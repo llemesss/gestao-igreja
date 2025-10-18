@@ -616,27 +616,13 @@ app.get('/api/users/reports/calendar/:id/pdf', verifyToken, async (req, res) => 
     const year = parseInt(String(req.query.year || new Date().getFullYear()));
 
     const userRes = await pool.query('SELECT id, name, cell_id FROM users WHERE id = $1', [targetUserId]);
-    if (userRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Usuário não encontrado' });
-    }
+    if (userRes.rows.length === 0) return res.status(404).json({ error: 'Usuário não encontrado' });
     const target = userRes.rows[0];
 
     let allowed = ['ADMIN','PASTOR','COORDENADOR'].includes(role) || userId === targetUserId;
-    if (!allowed && role === 'SUPERVISOR' && target.cell_id) {
-      try {
-        const supCheck = await pool.query('SELECT 1 FROM cells WHERE id = $1 AND supervisor_id = $2 LIMIT 1', [target.cell_id, userId]);
-        allowed = supCheck.rows.length > 0;
-      } catch {}
-    }
-    if (!allowed && target.cell_id) {
-      try {
-        const leaderCheck = await pool.query('SELECT 1 FROM cell_leaders WHERE user_id = $1 AND cell_id = $2 LIMIT 1', [userId, target.cell_id]);
-        allowed = leaderCheck.rows.length > 0;
-      } catch {}
-    }
-    if (!allowed) {
-      return res.status(403).json({ error: 'Acesso negado' });
-    }
+    if (!allowed && role === 'SUPERVISOR' && target.cell_id) { try { const supCheck = await pool.query('SELECT 1 FROM cells WHERE id = $1 AND supervisor_id = $2 LIMIT 1', [target.cell_id, userId]); allowed = supCheck.rows.length > 0; } catch {} }
+    if (!allowed && target.cell_id) { try { const leaderCheck = await pool.query('SELECT 1 FROM cell_leaders WHERE user_id = $1 AND cell_id = $2 LIMIT 1', [userId, target.cell_id]); allowed = leaderCheck.rows.length > 0; } catch {} }
+    if (!allowed) return res.status(403).json({ error: 'Acesso negado' });
 
     const datesRes = await pool.query(
       `SELECT prayer_date FROM daily_prayer_log 
@@ -644,29 +630,114 @@ app.get('/api/users/reports/calendar/:id/pdf', verifyToken, async (req, res) => 
        ORDER BY prayer_date ASC`,
       [targetUserId, year]
     );
-    const prayedDates = datesRes.rows.map(r => new Date(r.prayer_date));
+    const prayedSet = new Set(
+      (datesRes.rows || []).map(r => {
+        const d = new Date(r.prayer_date);
+        const y = d.getFullYear();
+        const m = String(d.getMonth()+1).padStart(2,'0');
+        const day = String(d.getDate()).padStart(2,'0');
+        return `${y}-${m}-${day}`;
+      })
+    );
 
-    // PDF simples: título e lista de dias com oração
+    // Estatísticas
+    const totalDaysYear = ((year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0)) ? 366 : 365;
+    const daysPrayed = prayedSet.size;
+    const percentage = totalDaysYear > 0 ? Math.round((daysPrayed / totalDaysYear) * 1000) / 10 : 0; // 1 decimal
+
+    // PDF com 12 calendários e destaque visual
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="calendario-oracao-${(target.name || 'membro').replace(/\s+/g,'-')}-${year}.pdf"`);
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
     doc.pipe(res);
-    doc.fontSize(18).text(`Calendário de Oração - ${year}`, { align: 'center' });
-    doc.moveDown();
-    doc.fontSize(12).text(`Membro: ${target.name || '-'}`);
-    doc.moveDown();
 
-    const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-    for (let m = 0; m < 12; m++) {
-      doc.fontSize(14).text(months[m]);
-      const monthDates = prayedDates.filter(d => d.getMonth() === m);
-      if (monthDates.length === 0) {
-        doc.fontSize(12).text('   (sem registros)');
-      } else {
-        const days = monthDates.map(d => d.getDate()).join(', ');
-        doc.fontSize(12).text(`   Dias com oração: ${days}`);
-      }
+    const monthsNamesFull = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const weekDays = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+    const drawMonthCalendar = (monthIndex) => {
+      doc.fontSize(16).text(`${monthsNamesFull[monthIndex]} ${year}`, { align: 'center' });
       doc.moveDown(0.5);
+
+      const pageWidth = doc.page.width;
+      const pageHeight = doc.page.height;
+      const margin = doc.page.margins.left; // equal margins
+      const gridWidth = pageWidth - margin*2;
+      const colCount = 7;
+      const rowCount = 7; // header + up to 6 weeks
+      const cellW = Math.floor(gridWidth / colCount);
+      const startX = margin;
+      let startY = doc.y;
+
+      // Header row (weekday labels)
+      doc.fontSize(10);
+      for (let c = 0; c < colCount; c++) {
+        const x = startX + c * cellW;
+        doc.rect(x, startY, cellW, 18).stroke();
+        doc.text(weekDays[c], x + 4, startY + 4, { width: cellW - 8, align: 'center' });
+      }
+      startY += 18;
+
+      const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+      const firstWeekday = new Date(year, monthIndex, 1).getDay(); // 0=Sun
+
+      let day = 1;
+      doc.fontSize(9);
+
+      for (let r = 0; r < 6; r++) {
+        for (let c = 0; c < colCount; c++) {
+          const x = startX + c * cellW;
+          const y = startY + r * 22;
+          let fillColor = null;
+          let label = '';
+
+          if (r === 0 && c < firstWeekday) {
+            // leading invalid cells
+            fillColor = '#f5f5f5';
+          } else if (day > daysInMonth) {
+            fillColor = '#f5f5f5';
+          } else {
+            label = String(day);
+            const iso = `${year}-${String(monthIndex+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+            if (prayedSet.has(iso)) {
+              fillColor = '#d1fae5'; // green-100
+            } else {
+              fillColor = '#ffffff';
+            }
+            day++;
+          }
+
+          if (fillColor) {
+            doc.save().rect(x, y, cellW, 22).fill(fillColor).restore();
+          }
+          doc.rect(x, y, cellW, 22).stroke();
+          if (label) {
+            doc.fillColor('#000000').text(label, x + 4, y + 5, { width: cellW - 8, align: 'left' });
+          }
+        }
+      }
+
+      // Legend
+      doc.moveDown(0.5);
+      doc.fontSize(9);
+      doc.text('Legenda: ', { continued: true });
+      doc.save().rect(doc.x, doc.y, 12, 10).fill('#d1fae5').restore();
+      doc.text(' Dia com oração', doc.x + 16, doc.y - 10);
+      doc.moveDown(1);
+    };
+
+    // Página de capa com resumo
+    doc.fontSize(18).text(`Calendário de Oração - ${year}`, { align: 'center' });
+    doc.moveDown(0.2);
+    doc.fontSize(12).text(`Membro: ${target.name || '-'}`, { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(12).text(`Dias de oração: ${daysPrayed}`, { align: 'center' });
+    doc.fontSize(12).text(`Percentual: ${percentage}%`, { align: 'center' });
+    doc.addPage();
+
+    // Desenhar os 12 meses, um por página
+    for (let m = 0; m < 12; m++) {
+      if (m > 0) doc.addPage();
+      drawMonthCalendar(m);
     }
 
     doc.end();
