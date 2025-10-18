@@ -39,15 +39,12 @@ export function Header({ title }: HeaderProps) {
   if (!isHydrated) return null;
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-white shadow-md border-b border-gray-200 px-6 py-4 relative">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Link href="/dashboard" className="text-blue-600 hover:underline">Início</Link>
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">{title}</h1>
-          </div>
-        </div>
-        
+    <header className="fixed top-0 left-0 right-0 z-50 bg-white shadow-lg">
+      {/* Nível 1: Nome do Usuário e Sair */}
+      <div className="flex justify-between items-center p-3 border-b border-gray-100">
+        {/* Logo/Título (Painel Administrativo) */}
+        <h1 className="text-lg font-semibold">Painel Administrativo</h1>
+        {/* Informações do Admin e Sair */}
         {user && (
           <div className="flex items-center space-x-4">
             <div className="text-right">
@@ -65,6 +62,15 @@ export function Header({ title }: HeaderProps) {
           </div>
         )}
       </div>
+
+      {/* Nível 2: Botões de Navegação (Menu) */}
+      <nav className="flex space-x-4 p-3">
+        <Link href="/dashboard" className="px-3 py-1 rounded text-gray-700 hover:bg-gray-100">Início</Link>
+        <Link href="/dashboard?tab=oracoes" className="px-3 py-1 rounded text-gray-700 hover:bg-gray-100">Orações</Link>
+        <Link href="/dashboard?tab=perfil" className="px-3 py-1 rounded text-gray-700 hover:bg-gray-100">Meu Perfil</Link>
+        <Link href="/celulas" className="px-3 py-1 rounded text-gray-700 hover:bg-gray-100">Gerenciar Células</Link>
+        <Link href="/usuarios" className="px-3 py-1 rounded text-gray-700 hover:bg-gray-100">Gerenciar Usuários</Link>
+      </nav>
     </header>
   );
 }
