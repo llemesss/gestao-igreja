@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Layout } from '@/components/layout';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
@@ -21,7 +22,7 @@ import LiderCellView from '@/components/views/LiderCellView';
 
 type ViewType = 'inicio' | 'oracoes' | 'perfil' | 'gerenciarCelulas' | 'gerenciarUsuarios' | 'cellDetail';
 
-export default function DashboardPage() {
+function DashboardContent() {
   const [prayerStats, setPrayerStats] = useState<PrayerStats | null>(null);
   const [cells, setCells] = useState<Cell[]>([]);
   const [supervisedCells, setSupervisedCells] = useState<Cell[]>([]);
@@ -326,5 +327,13 @@ export default function DashboardPage() {
         </motion.div>
       </AnimatePresence>
     </Layout>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div>Carregando...</div>}>
+      <DashboardContent />
+    </Suspense>
   );
 }
