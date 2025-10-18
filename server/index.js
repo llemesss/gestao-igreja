@@ -85,13 +85,14 @@ try {
 }
 
 // Teste crítico de conexão inicial para logs do Render
+let DB_INIT_OK = true;
 try {
   const ping = await pool.query('SELECT NOW()');
   console.log('STATUS DO DB: CONEXÃO BEM-SUCEDIDA.', ping?.rows?.[0] || {});
 } catch (error) {
-  console.error('ERRO CRÍTICO NA CONEXÃO INICIAL COM O BANCO:', error?.message, error?.stack);
-  // Força a falha do serviço para registrar claramente o erro de inicialização
-  process.exit(1);
+  DB_INIT_OK = false;
+  console.error('ERRO NA CONEXÃO INICIAL COM O BANCO:', error?.message, error?.stack);
+  // Não derruba o processo: mantém servidor vivo em modo degradado
 }
 
 // App
