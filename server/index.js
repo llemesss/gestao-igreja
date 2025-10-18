@@ -689,16 +689,24 @@ app.get('/api/users', verifyToken, async (req, res) => {
 
     let sql = `
       SELECT u.id, u.name, u.email, u.role, u.cell_id, u.created_at,
-             c.name as cell_name
+             c.name AS cell_name,
+             c_sup.name AS celula_supervisionada_name,
+             c_lider.name AS celula_liderada_name
       FROM users u
       LEFT JOIN cells c ON c.id = u.cell_id
+      LEFT JOIN LATERAL (
+        SELECT name FROM cells WHERE supervisor_id = u.id ORDER BY name ASC LIMIT 1
+      ) c_sup ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT name FROM cells WHERE leader_id = u.id ORDER BY name ASC LIMIT 1
+      ) c_lider ON TRUE
     `;
     const params = [];
     if (q) {
       params.push(`%${q.toLowerCase()}%`);
       sql += ` WHERE LOWER(u.name) LIKE $1 OR LOWER(u.email) LIKE $1`;
     }
-    sql += ` ORDER BY u.created_at DESC NULLS LAST, u.name ASC LIMIT $${params.length+1} OFFSET $${params.length+2}`;
+    sql += ` ORDER BY u.name ASC LIMIT $${params.length+1} OFFSET $${params.length+2}`;
     params.push(limit, offset);
 
     const result = await pool.query(sql, params);
@@ -781,16 +789,24 @@ app.get('/api/usuarios', verifyToken, async (req, res) => {
 
     let sql = `
       SELECT u.id, u.name, u.email, u.role, u.cell_id, u.created_at,
-             c.name as cell_name
+             c.name AS cell_name,
+             c_sup.name AS celula_supervisionada_name,
+             c_lider.name AS celula_liderada_name
       FROM users u
       LEFT JOIN cells c ON c.id = u.cell_id
+      LEFT JOIN LATERAL (
+        SELECT name FROM cells WHERE supervisor_id = u.id ORDER BY name ASC LIMIT 1
+      ) c_sup ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT name FROM cells WHERE leader_id = u.id ORDER BY name ASC LIMIT 1
+      ) c_lider ON TRUE
     `;
     const params = [];
     if (q) {
       params.push(`%${q.toLowerCase()}%`);
       sql += ` WHERE LOWER(u.name) LIKE $1 OR LOWER(u.email) LIKE $1`;
     }
-    sql += ` ORDER BY u.created_at DESC NULLS LAST, u.name ASC LIMIT $${params.length+1} OFFSET $${params.length+2}`;
+    sql += ` ORDER BY u.name ASC LIMIT $${params.length+1} OFFSET $${params.length+2}`;
     params.push(limit, offset);
 
     const result = await pool.query(sql, params);

@@ -334,11 +334,20 @@ export default function GerenciarUsuariosView() {
           return (
             <div className="space-y-1">
               <div className="text-xs text-blue-600 font-semibold">Supervisiona:</div>
-              {user.supervised_cells.map((cell, index) => (
+              {user.supervised_cells.map((cell) => (
                 <div key={cell.id} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">
                   {cell.name}
                 </div>
               ))}
+            </div>
+          );
+        }
+
+        // NOVO: Se for líder, mostrar célula liderada
+        if (user.role === 'LIDER' && user.celula_liderada_name) {
+          return (
+            <div className="text-xs bg-yellow-50 text-yellow-700 px-2 py-1 rounded font-medium">
+              Lidera: {user.celula_liderada_name}
             </div>
           );
         }
