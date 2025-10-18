@@ -498,8 +498,16 @@ app.get('/api/users/:id', verifyToken, async (req, res) => {
     }
     // 1) Perfil do usuário ativo
     const userQuery = HAS_USERS_STATUS
-      ? `SELECT id, name, email, phone, role, cell_id FROM users WHERE id = $1 AND status = 'ACTIVE'`
-      : `SELECT id, name, email, phone, role, cell_id FROM users WHERE id = $1`;
+      ? `SELECT u.id, u.name, u.email, u.phone, u.role, u.cell_id,
+                 c_lead.id AS celula_liderada_id, c_lead.name AS celula_liderada_name
+         FROM users u
+         LEFT JOIN cells c_lead ON c_lead.leader_id = u.id
+         WHERE u.id = $1 AND u.status = 'ACTIVE'`
+      : `SELECT u.id, u.name, u.email, u.phone, u.role, u.cell_id,
+                 c_lead.id AS celula_liderada_id, c_lead.name AS celula_liderada_name
+         FROM users u
+         LEFT JOIN cells c_lead ON c_lead.leader_id = u.id
+         WHERE u.id = $1`;
     const userResult = await pool.query(userQuery, [targetUserId]);
     if (userResult.rows.length === 0) {
       return res.status(404).json({ message: 'Usuário não encontrado' });

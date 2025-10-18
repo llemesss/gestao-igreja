@@ -30,6 +30,8 @@ interface User {
   supervised_cells?: Array<{ id: string; name: string }>; // Adicionando células supervisionadas
   created_at: string;
   updated_at: string;
+  celula_liderada_id?: string; // novo campo: id da célula liderada
+  celula_liderada_name?: string; // opcional: nome da célula liderada
 }
 
 interface Cell {
@@ -70,6 +72,10 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, cells, onCl
         fetchSupervisedCells(user.id);
       } else {
         setSelectedCellIds([]);
+      }
+      // Para líderes, inicializar dropdown com célula liderada vinda do backend
+      if (user.role === 'LIDER') {
+        setLeaderCellId(user.celula_liderada_id || '');
       }
     } else {
       // Limpar estados quando não há usuário
@@ -479,9 +485,22 @@ export default function GerenciarUsuariosView() {
     return userRole === 'ADMIN';
   };
 
-  const handleEditUser = (user: User) => {
-    setSelectedUser(user);
-    setEditModalOpen(true);
+  const handleEditUser = async (user: User) => {
+    try {
+      // Buscar detalhes do usuário (incluindo celula_liderada_id) antes de abrir o modal
+      const response = await api.get(`/users/${user.id}`);
+      const profile = response?.data?.profile;
+      if (profile) {
+        setSelectedUser({ ...user, ...profile });
+      } else {
+        setSelectedUser(user);
+      }
+    } catch (error) {
+      console.error('Falha ao carregar detalhes do usuário:', error);
+      setSelectedUser(user);
+    } finally {
+      setEditModalOpen(true);
+    }
   };
 
   const handleDeleteUser = async (userId: string) => {
