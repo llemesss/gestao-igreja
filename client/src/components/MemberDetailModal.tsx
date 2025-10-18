@@ -64,13 +64,11 @@ export default function MemberDetailModal({ member, isOpen, onClose }: MemberDet
     })
     .then((response) => {
       clearInterval(progressInterval);
-      
       // Finaliza o progresso
       toast.loading('Gerando sua ficha em PDF...', {
         id: toastId,
         description: 'Finalizando download...'
       });
-
       // Inicia o download
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
@@ -80,13 +78,58 @@ export default function MemberDetailModal({ member, isOpen, onClose }: MemberDet
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-
       // Toast de sucesso
       toast.success('Download iniciado!', { id: toastId });
     })
     .catch((error) => {
       clearInterval(progressInterval);
       toast.error('Erro ao gerar o PDF. Tente novamente.', { id: toastId });
+    });
+  };
+
+  // Novo: Download do Calendário de Oração em PDF
+  const handleDownloadCalendarPdf = (member: Member) => {
+    const currentYear = new Date().getFullYear();
+    let progress = 0;
+    const toastId = toast.loading('Gerando calendário de oração em PDF...', {
+      description: 'Preparando calendário...'
+    });
+
+    const progressInterval = setInterval(() => {
+      progress += Math.random() * 15;
+      if (progress < 90) {
+        toast.loading('Gerando calendário de oração em PDF...', {
+          id: toastId,
+          description: `Progresso: ${Math.round(progress)}%`
+        });
+      }
+    }, 200);
+
+    api.get(`/reports/calendar/${member.id}/download?year=${currentYear}`, {
+      responseType: 'blob',
+      timeout: 30000,
+    })
+    .then((response) => {
+      clearInterval(progressInterval);
+      toast.loading('Gerando calendário de oração em PDF...', {
+        id: toastId,
+        description: 'Finalizando download...'
+      });
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `calendario-oracao-${member.name}-${currentYear}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast.success('Download iniciado!', { id: toastId });
+    })
+    .catch((error) => {
+      clearInterval(progressInterval);
+      toast.error('Erro ao gerar o calendário. Tente novamente.', { id: toastId });
     });
   };
 
@@ -130,6 +173,12 @@ export default function MemberDetailModal({ member, isOpen, onClose }: MemberDet
                   className="print-button"
                 >
                   Baixar Ficha em PDF
+                </button>
+                <button 
+                  onClick={() => member && handleDownloadCalendarPdf(member)} 
+                  className="print-button"
+                >
+                  Baixar Calendário de Oração
                 </button>
                 <button onClick={onClose} className="close-button">&times;</button>
               </div>

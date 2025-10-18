@@ -1565,6 +1565,80 @@ app.get('/api/prayers/my-stats', verifyToken, async (req, res) => {
   }
 });
 
+// Prayers: obter datas de oração (array de YYYY-MM-DD)
+app.get('/api/prayers/:userId/log', verifyToken, async (req, res) => {
+  try {
+    const requester = req.user;
+    const targetUserId = req.params.userId;
+    const year = parseInt(String(req.query.year || ''));
+    const month = parseInt(String(req.query.month || ''));
+
+    if (!isValidUuid(targetUserId)) {
+      return res.status(400).json({ error: 'userId inválido' });
+    }
+
+    // Autorização: admin/pastor/coordenador, o próprio usuário, supervisor da célula ou líder da célula
+    let allowed = ['ADMIN','PASTOR','COORDENADOR'].includes(requester.role) || requester.userId === targetUserId;
+    if (!allowed) {
+      const cellRes = await pool.query('SELECT cell_id FROM users WHERE id = $1', [targetUserId]);
+      const targetCellId = cellRes.rows[0]?.cell_id;
+      if (targetCellId) {
+        const supCheck = await pool.query('SELECT 1 FROM cells WHERE id = $1 AND supervisor_id = $2 LIMIT 1', [targetCellId, requester.userId]);
+        allowed = supCheck.rows.length > 0;
+        if (!allowed) {
+          const leaderCheck = await pool.query('SELECT 1 FROM cell_leaders WHERE cell_id = $1 AND user_id = $2 LIMIT 1', [targetCellId, requester.userId]);
+          allowed = leaderCheck.rows.length > 0;
+        }
+      }
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+
+    let sql = 'SELECT prayer_date FROM daily_prayer_log WHERE user_id = $1';
+    const params = [targetUserId];
+    if (!Number.isNaN(year)) {
+      sql += ' AND EXTRACT(YEAR FROM prayer_date) = $2';
+      params.push(year);
+      if (!Number.isNaN(month)) {
+        sql += ' AND EXTRACT(MONTH FROM prayer_date) = $3';
+        params.push(month);
+      }
+    } else if (!Number.isNaN(month)) {
+      sql += ' AND EXTRACT(YEAR FROM prayer_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND EXTRACT(MONTH FROM prayer_date) = $2';
+      params.push(month);
+    }
+    sql += ' ORDER BY prayer_date ASC';
+
+    const result = await pool.query(sql, params);
+    const dates = (result.rows || []).map(r => {
+      const d = new Date(r.prayer_date);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    });
+
+    return res.json(dates);
+  } catch (err) {
+    console.error('Erro em GET /api/prayers/:userId/log', err);
+    return res.status(500).json({ error: 'Erro ao buscar datas de oração' });
+  }
+});
+
+// Reports: alias para download de calendário em PDF
+app.get('/api/reports/calendar/:userId/download', verifyToken, async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const yearParam = req.query.year ? `?year=${encodeURIComponent(String(req.query.year))}` : '';
+    // Redireciona para a rota existente que gera o PDF
+    return res.redirect(307, `/api/users/reports/calendar/${userId}/pdf${yearParam}`);
+  } catch (err) {
+    console.error('Erro em GET /api/reports/calendar/:userId/download', err);
+    return res.status(500).json({ error: 'Erro ao processar download do calendário' });
+  }
+});
+
 // Cells: listar células (simplificado)
 app.get('/api/cells', verifyToken, async (req, res) => {
   try {
