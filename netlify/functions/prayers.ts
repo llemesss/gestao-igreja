@@ -68,7 +68,7 @@ export const handler: Handler = async (event, context) => {
     // POST /log-daily -> Registrar oração diária
     if (path === '/log-daily' && method === 'POST') {
       const { userId } = user;
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const now = new Date(); const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`; // YYYY-MM-DD
 
       // Lógica de UPSERT - verificar se já existe registro para hoje
       const existingRecord = await pool.query(
@@ -104,7 +104,7 @@ export const handler: Handler = async (event, context) => {
     // POST / -> Registrar oração de hoje (endpoint legado)
     if (path === '' && method === 'POST') {
       const { userId } = user;
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const now = new Date(); const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`; // YYYY-MM-DD
 
       // Verificar se já orou hoje
       const existingPrayer = await pool.query(
@@ -145,7 +145,7 @@ export const handler: Handler = async (event, context) => {
     // GET /status-today -> Verificar se o usuário já orou hoje
     if (path === '/status-today' && method === 'GET') {
       const { userId } = user;
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const now = new Date(); const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`; // YYYY-MM-DD
 
       // Verificar se existe registro de oração para hoje
       const existingRecord = await pool.query(
@@ -235,7 +235,7 @@ export const handler: Handler = async (event, context) => {
       } catch {}
 
       // Verificar se orou hoje
-      const today = new Date().toISOString().split('T')[0];
+      const now = new Date(); const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
       const prayedToday = historyResult.rows.some(row => 
         row.prayer_date.toString().split('T')[0] === today
       );
@@ -344,19 +344,19 @@ export const handler: Handler = async (event, context) => {
           SELECT COUNT(*) as count
           FROM daily_prayer_log
           WHERE user_id = $1 AND prayer_date::date = $2::date
-        `, [targetUserId, today.toISOString().split('T')[0]]),
+        `, [targetUserId, `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`]),
         
         pool.query(`
           SELECT COUNT(*) as count
           FROM daily_prayer_log
           WHERE user_id = $1 AND prayer_date >= $2
-        `, [targetUserId, sevenDaysAgo.toISOString().split('T')[0]]),
+        `, [targetUserId, `${sevenDaysAgo.getFullYear()}-${String(sevenDaysAgo.getMonth()+1).padStart(2,'0')}-${String(sevenDaysAgo.getDate()).padStart(2,'0')}`]),
         
         pool.query(`
           SELECT COUNT(*) as count
           FROM daily_prayer_log
           WHERE user_id = $1 AND prayer_date >= $2
-        `, [targetUserId, startOfMonth.toISOString().split('T')[0]]),
+        `, [targetUserId, `${startOfMonth.getFullYear()}-${String(startOfMonth.getMonth()+1).padStart(2,'0')}-${String(startOfMonth.getDate()).padStart(2,'0')}`]),
         
         pool.query(`
           SELECT COUNT(*) as count

@@ -1159,6 +1159,89 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
   }
 });
 
+// Users: DELETE /:id -> exclusão segura com limpeza de referências
+app.delete('/api/users/:id', verifyToken, async (req, res) => {
+  try {
+    const { role, userId: actorId } = req.user;
+    if (!['ADMIN', 'PASTOR', 'COORDENADOR'].includes(role)) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+
+    const rawTargetUserId = req.params.id;
+    const targetUserId = typeof rawTargetUserId === 'string' ? rawTargetUserId.trim() : '';
+    if (!targetUserId || !isValidUuid(targetUserId)) {
+      return res.status(400).json({ error: 'ID de usuário inválido' });
+    }
+
+    // Confirmar existência do usuário
+    const userRes = await pool.query('SELECT id, name, email FROM users WHERE id = $1', [targetUserId]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Limpar referências em cells
+      await client.query('UPDATE cells SET supervisor_id = NULL WHERE supervisor_id = $1', [targetUserId]);
+      await client.query('UPDATE cells SET leader_id = NULL WHERE leader_id = $1', [targetUserId]);
+
+      // Remover mapeamentos em cell_leaders (se existir)
+      try {
+        await client.query('DELETE FROM cell_leaders WHERE user_id = $1', [targetUserId]);
+      } catch (e) {
+        console.warn('[DELETE user] Falha ao limpar cell_leaders:', e?.message || e);
+      }
+
+      // Remover registros de oração
+      try {
+        await client.query('DELETE FROM daily_prayer_log WHERE user_id = $1', [targetUserId]);
+      } catch (e) {
+        console.warn('[DELETE user] Falha ao remover registros de oração:', e?.message || e);
+      }
+
+      // Excluir usuário
+      const delRes = await client.query('DELETE FROM users WHERE id = $1', [targetUserId]);
+      if (delRes.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Usuário não encontrado para exclusão' });
+      }
+
+      await client.query('COMMIT');
+
+      // Auditoria
+      try {
+        const auditId = uuidv4();
+        const ip = String((req.headers['x-forwarded-for'] || req.ip || '')).split(',')[0].trim();
+        const details = {
+          route: req.originalUrl,
+          method: req.method,
+          actor_role: role,
+          timestamp: new Date().toISOString(),
+        };
+        await pool.query(
+          'INSERT INTO audit_logs (id, performed_by, target_user_id, action, details, ip) VALUES ($1, $2, $3, $4, $5::jsonb, $6)',
+          [auditId, actorId, targetUserId, 'user.delete', JSON.stringify(details), ip]
+        );
+      } catch (e) {
+        console.warn('[AUDIT] Falha ao inserir audit_logs em delete:', e?.message || e);
+      }
+
+      return res.status(200).json({ message: 'Usuário excluído com sucesso' });
+    } catch (errTxn) {
+      await client.query('ROLLBACK');
+      console.error('Erro transacional em DELETE /api/users/:id', { message: errTxn?.message, code: errTxn?.code, detail: errTxn?.detail });
+      return res.status(500).json({ error: 'Erro interno ao excluir usuário' });
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Erro em DELETE /api/users/:id', err);
+    return res.status(500).json({ error: 'Erro interno ao excluir usuário' });
+  }
+});
+
 // Me: GET perfil
 app.get('/api/me', verifyToken, async (req, res) => {
   try {
@@ -1327,7 +1410,7 @@ app.post('/api/prayers/register', verifyToken, async (req, res) => {
       // Fallback amigável: considera como sucesso sem tocar DB
       return res.status(200).json({ message: 'Oração registrada', fallback: true });
     }
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date(); const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
     const existing = await pool.query(
       'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2 LIMIT 1',
       [userId, today]
@@ -1354,7 +1437,7 @@ app.get('/api/prayers/status-today', verifyToken, async (req, res) => {
       console.warn('[UUID] userId inválido em GET /api/prayers/status-today', { userId });
       return res.status(200).json({ hasPrayed: false, fallback: true });
     }
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date(); const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
     const existing = await pool.query(
       'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2 LIMIT 1',
       [userId, today]
@@ -1416,7 +1499,7 @@ app.post('/api/prayers', verifyToken, async (req, res) => {
       // Fallback amigável: considera como sucesso sem tocar DB
       return res.status(200).json({ message: 'Oração registrada com sucesso!', fallback: true });
     }
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date(); const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
     const exists = await pool.query(
       'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2',
       [userId, today]
@@ -1447,7 +1530,7 @@ app.get('/api/prayers/my-stats', verifyToken, async (req, res) => {
     const since = new Date(); since.setDate(since.getDate() - days);
     const countRes = await pool.query(
       `SELECT COUNT(*) as count FROM daily_prayer_log WHERE user_id = $1 AND prayer_date >= $2`,
-      [userId, since.toISOString().split('T')[0]]
+      [userId, `${since.getFullYear()}-${String(since.getMonth()+1).padStart(2,'0')}-${String(since.getDate()).padStart(2,'0')}`]
     );
     return res.json({ count: parseInt(countRes.rows[0].count || '0'), days });
   } catch (err) {
