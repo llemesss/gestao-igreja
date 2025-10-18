@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui';
 import { auth } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 interface HeaderProps {
   title?: string;
@@ -41,6 +42,7 @@ export function Header({ title }: HeaderProps) {
     <header className="fixed top-0 left-0 right-0 z-50 bg-white shadow-md border-b border-gray-200 px-6 py-4 relative">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
+          <Link href="/dashboard" className="text-blue-600 hover:underline">Início</Link>
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">{title}</h1>
           </div>
