@@ -498,26 +498,19 @@ app.get('/api/users/:id', verifyToken, async (req, res) => {
     }
     // 1) Perfil do usuário ativo
     const userQuery = HAS_USERS_STATUS
-      ? `SELECT * FROM users WHERE id = $1 AND status = 'ACTIVE'`
-      : `SELECT * FROM users WHERE id = $1`;
+      ? `SELECT u.*, c.id AS celula_liderada_id, c.name AS celula_liderada_name
+         FROM users u
+         LEFT JOIN cells c ON c.leader_id = u.id
+         WHERE u.id = $1 AND u.status = 'ACTIVE'`
+      : `SELECT u.*, c.id AS celula_liderada_id, c.name AS celula_liderada_name
+         FROM users u
+         LEFT JOIN cells c ON c.leader_id = u.id
+         WHERE u.id = $1`;
     const userResult = await pool.query(userQuery, [targetUserId]);
     if (userResult.rows.length === 0) {
       return res.status(404).json({ message: 'Usuário não encontrado' });
     }
-    let userProfile = userResult.rows[0];
-
-    // Adicionar célula liderada de forma segura (consulta separada)
-    try {
-      const leadRes = await pool.query('SELECT id, name FROM cells WHERE leader_id = $1 LIMIT 1', [targetUserId]);
-      const leadCell = leadRes.rows[0] || null;
-      userProfile = {
-        ...userProfile,
-        celula_liderada_id: leadCell?.id || null,
-        celula_liderada_name: leadCell?.name || null,
-      };
-    } catch (e) {
-      console.warn('Falha ao consultar célula liderada:', e?.message || e);
-    }
+    const userProfile = userResult.rows[0];
 
     // 2) Estatísticas de oração
     const [countResult, lastResult] = await Promise.all([
