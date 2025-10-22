@@ -619,7 +619,7 @@ app.get('/api/users/reports/calendar/:id/pdf', verifyToken, async (req, res) => 
 
     // PDF simples: título e lista de dias com oração
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="calendario-oracao-${targetUserId}-${year}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="calendario-oracao-${req.params.userId}-${req.params.year}.pdf"`);
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     doc.pipe(res);
     doc.fontSize(18).text(`Calendário de Oração - ${year}`, { align: 'center' });
@@ -648,11 +648,7 @@ app.get('/api/users/reports/calendar/:id/pdf', verifyToken, async (req, res) => 
 });
 
 // Reports: download calendário de oração com layout de 12 meses + estatísticas
-// TEMP TEST ROUTE: Override to isolate 404 vs PDF handler issues
-app.get('/api/reports/calendar/:userId/download/:year', (req, res) => {
-  console.log("SUCESSO: Rota do calendário acessada.");
-  res.send('A ROTA FUNCIONA!');
-});
+
 
 // Original route kept below for later reintroduction of PDF logic
 app.get('/api/reports/calendar/:userId/download/:year', async (req, res) => {
