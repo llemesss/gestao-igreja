@@ -19,6 +19,11 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   useEffect(() => {
     const message = searchParams.get('message');
@@ -26,6 +31,13 @@ function LoginForm() {
       setSuccessMessage(message);
     }
   }, [searchParams]);
+
+  // Redirecionar automaticamente se já estiver autenticado
+  useEffect(() => {
+    if (isHydrated && auth.isAuthenticated()) {
+      router.replace('/dashboard');
+    }
+  }, [isHydrated, router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -57,7 +69,9 @@ function LoginForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      return;
+    }
 
     setLoading(true);
     try {
@@ -67,7 +81,7 @@ function LoginForm() {
       if (response.token && response.user) {
         toast.success('Login realizado com sucesso!');
         auth.setAuth(response.token, response.user);
-        router.push('/dashboard');
+        router.replace('/dashboard');
       } else {
         const msg = response.message || 'Erro ao fazer login';
         setErrors({ general: msg });

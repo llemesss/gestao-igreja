@@ -226,9 +226,6 @@ export default function DashboardHomeView({ user, prayerStats, cells = [], userC
 
       {/* Ações Rápidas */}
       <Card>
-        <CardHeader>
-          <CardTitle>Ações Rápidas</CardTitle>
-        </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-4">
             <button 

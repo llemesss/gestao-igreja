@@ -48,6 +48,8 @@ function normalizeApiBase(url?: string) {
 }
 
 const API_URL = normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);
+// URL fixa de fallback de produção
+const PROD_API_BASE = 'https://gestao-igreja-backend.onrender.com/api';
 
 // Criar instância do axios
 const apiClient = axios.create({
@@ -66,18 +68,37 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// Interceptor para tratar erros de autenticação
+// Interceptor para tratar erros e aplicar fallback automático para produção
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Token expirado ou inválido
+  async (error) => {
+    const originalConfig = error?.config || {};
+    const status = error?.response?.status;
+    const isNetworkError = !error?.response && (error?.code === 'ERR_NETWORK' || error?.message?.includes('Network Error'));
+
+    // Fallback: se servidor local estiver inacessível, tenta uma vez com backend de produção
+    if (isNetworkError && !originalConfig.__retried) {
+      try {
+        originalConfig.__retried = true;
+        // Corrige: sobrescrever baseURL também no config da requisição
+        originalConfig.baseURL = PROD_API_BASE;
+        return await apiClient.request(originalConfig);
+      } catch (retryErr) {
+        const msg = retryErr?.response?.data?.error || retryErr?.response?.data?.message || 'Falha ao acessar o servidor (fallback).';
+        toast.error(msg);
+        return Promise.reject(retryErr);
+      }
+    }
+
+    if (status === 401) {
       Cookies.remove('auth-token');
       Cookies.remove('user-data');
-      window.location.href = '/login';
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
     }
-    // Exibir toast amigável para outros erros
-    const message = error.response?.data?.error || error.response?.data?.message || 'Ocorreu um erro ao comunicar com a API.';
+
+    const message = error?.response?.data?.error || error?.response?.data?.message || 'Ocorreu um erro ao comunicar com a API.';
     toast.error(message);
     return Promise.reject(error);
   }
@@ -248,17 +269,17 @@ const prayersApi = {
   },
 
   getUserStats: async (userId: string, days?: number) => {
-    const response = await apiClient.get(`/prayers/stats/${userId}`, { params: { days } });
+    const response = await apiClient.get(`/prayers/stats`, { params: { userId, days } });
     return response.data;
   },
 
   registerPrayer: async () => {
-    const response = await apiClient.post('/prayers/register');
+    const response = await apiClient.post('/prayers');
     return response.data;
-  }
+  },
 };
 
-// Funções para perfil do usuário
+// Perfil
 const profileApi = {
   getProfile: async () => {
     const response = await apiClient.get('/me');
@@ -271,10 +292,7 @@ const profileApi = {
   },
 };
 
-// Exportar a instância do Axios diretamente como api
 export const api = apiClient;
-
-// Objeto API unificado com métodos organizados
 export const apiMethods = {
   auth: authApi,
   users: usersApi,

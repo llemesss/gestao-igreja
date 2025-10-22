@@ -59,24 +59,33 @@ try {
   const database = (url.pathname || '').replace(/^\//, '') || undefined;
   const user = decodeURIComponent(url.username || '');
   const password = decodeURIComponent(url.password || '');
+  // Decidir se SSL deve ser usado: desativar para localhost ou sslmode=disable
+  const isLocalHost = ['localhost', '127.0.0.1'].includes(url.hostname);
+  const sslMode = url.searchParams.get('sslmode');
+  const useSsl = !(isLocalHost || (sslMode && sslMode.toLowerCase() === 'disable'));
+
   pool = new Pool({
     host: hostIPv4,
     port,
     database,
     user,
     password,
-    ssl: { require: true, rejectUnauthorized: false },
+    ssl: useSsl ? { require: true, rejectUnauthorized: false } : false,
     keepAlive: true,
     connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 30000,
     max: 10,
   });
-  console.log('[DB] Pool inicializado com IPv4', { host: hostIPv4, port });
+  console.log('[DB] Pool inicializado com IPv4', { host: hostIPv4, port, ssl: useSsl ? 'enabled' : 'disabled' });
 } catch (e) {
   console.warn('[DB] Falha ao resolver IPv4; usando connectionString padrão:', e?.message || e);
+  // Fallback: respeitar sslmode=disable na connectionString simples
+  const fallbackUrl = new URL(String(DATABASE_URL));
+  const sslModeFallback = fallbackUrl.searchParams.get('sslmode');
+  const useSslFallback = !(['localhost', '127.0.0.1'].includes(fallbackUrl.hostname) || (sslModeFallback && sslModeFallback.toLowerCase() === 'disable'));
   pool = new Pool({
     connectionString: DATABASE_URL,
-    ssl: { require: true, rejectUnauthorized: false },
+    ssl: useSslFallback ? { require: true, rejectUnauthorized: false } : false,
     keepAlive: true,
     connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 30000,
@@ -85,14 +94,13 @@ try {
 }
 
 // Teste crítico de conexão inicial para logs do Render
-let DB_INIT_OK = true;
 try {
   const ping = await pool.query('SELECT NOW()');
   console.log('STATUS DO DB: CONEXÃO BEM-SUCEDIDA.', ping?.rows?.[0] || {});
 } catch (error) {
-  DB_INIT_OK = false;
-  console.error('ERRO NA CONEXÃO INICIAL COM O BANCO:', error?.message, error?.stack);
-  // Não derruba o processo: mantém servidor vivo em modo degradado
+  console.error('ERRO CRÍTICO NA CONEXÃO INICIAL COM O BANCO:', error?.message, error?.stack);
+  // Força a falha do serviço para registrar claramente o erro de inicialização
+  process.exit(1);
 }
 
 // App
@@ -499,14 +507,8 @@ app.get('/api/users/:id', verifyToken, async (req, res) => {
     }
     // 1) Perfil do usuário ativo
     const userQuery = HAS_USERS_STATUS
-      ? `SELECT u.*, c.id AS celula_liderada_id, c.name AS celula_liderada_name
-         FROM users u
-         LEFT JOIN cells c ON c.leader_id = u.id
-         WHERE u.id = $1 AND u.status = 'ACTIVE'`
-      : `SELECT u.*, c.id AS celula_liderada_id, c.name AS celula_liderada_name
-         FROM users u
-         LEFT JOIN cells c ON c.leader_id = u.id
-         WHERE u.id = $1`;
+      ? `SELECT id, name, email, phone, role, cell_id FROM users WHERE id = $1 AND status = 'ACTIVE'`
+      : `SELECT id, name, email, phone, role, cell_id FROM users WHERE id = $1`;
     const userResult = await pool.query(userQuery, [targetUserId]);
     if (userResult.rows.length === 0) {
       return res.status(404).json({ message: 'Usuário não encontrado' });
@@ -616,13 +618,27 @@ app.get('/api/users/reports/calendar/:id/pdf', verifyToken, async (req, res) => 
     const year = parseInt(String(req.query.year || new Date().getFullYear()));
 
     const userRes = await pool.query('SELECT id, name, cell_id FROM users WHERE id = $1', [targetUserId]);
-    if (userRes.rows.length === 0) return res.status(404).json({ error: 'Usuário não encontrado' });
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
     const target = userRes.rows[0];
 
     let allowed = ['ADMIN','PASTOR','COORDENADOR'].includes(role) || userId === targetUserId;
-    if (!allowed && role === 'SUPERVISOR' && target.cell_id) { try { const supCheck = await pool.query('SELECT 1 FROM cells WHERE id = $1 AND supervisor_id = $2 LIMIT 1', [target.cell_id, userId]); allowed = supCheck.rows.length > 0; } catch {} }
-    if (!allowed && target.cell_id) { try { const leaderCheck = await pool.query('SELECT 1 FROM cell_leaders WHERE user_id = $1 AND cell_id = $2 LIMIT 1', [userId, target.cell_id]); allowed = leaderCheck.rows.length > 0; } catch {} }
-    if (!allowed) return res.status(403).json({ error: 'Acesso negado' });
+    if (!allowed && role === 'SUPERVISOR' && target.cell_id) {
+      try {
+        const supCheck = await pool.query('SELECT 1 FROM cells WHERE id = $1 AND supervisor_id = $2 LIMIT 1', [target.cell_id, userId]);
+        allowed = supCheck.rows.length > 0;
+      } catch {}
+    }
+    if (!allowed && target.cell_id) {
+      try {
+        const leaderCheck = await pool.query('SELECT 1 FROM cell_leaders WHERE user_id = $1 AND cell_id = $2 LIMIT 1', [userId, target.cell_id]);
+        allowed = leaderCheck.rows.length > 0;
+      } catch {}
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
 
     const datesRes = await pool.query(
       `SELECT prayer_date FROM daily_prayer_log 
@@ -630,114 +646,29 @@ app.get('/api/users/reports/calendar/:id/pdf', verifyToken, async (req, res) => 
        ORDER BY prayer_date ASC`,
       [targetUserId, year]
     );
-    const prayedSet = new Set(
-      (datesRes.rows || []).map(r => {
-        const d = new Date(r.prayer_date);
-        const y = d.getFullYear();
-        const m = String(d.getMonth()+1).padStart(2,'0');
-        const day = String(d.getDate()).padStart(2,'0');
-        return `${y}-${m}-${day}`;
-      })
-    );
+    const prayedDates = datesRes.rows.map(r => new Date(r.prayer_date));
 
-    // Estatísticas
-    const totalDaysYear = ((year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0)) ? 366 : 365;
-    const daysPrayed = prayedSet.size;
-    const percentage = totalDaysYear > 0 ? Math.round((daysPrayed / totalDaysYear) * 1000) / 10 : 0; // 1 decimal
-
-    // PDF com 12 calendários e destaque visual
+    // PDF simples: título e lista de dias com oração
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="calendario-oracao-${(target.name || 'membro').replace(/\s+/g,'-')}-${year}.pdf"`);
-    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
     doc.pipe(res);
-
-    const monthsNamesFull = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-    const weekDays = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-
-    const drawMonthCalendar = (monthIndex) => {
-      doc.fontSize(16).text(`${monthsNamesFull[monthIndex]} ${year}`, { align: 'center' });
-      doc.moveDown(0.5);
-
-      const pageWidth = doc.page.width;
-      const pageHeight = doc.page.height;
-      const margin = doc.page.margins.left; // equal margins
-      const gridWidth = pageWidth - margin*2;
-      const colCount = 7;
-      const rowCount = 7; // header + up to 6 weeks
-      const cellW = Math.floor(gridWidth / colCount);
-      const startX = margin;
-      let startY = doc.y;
-
-      // Header row (weekday labels)
-      doc.fontSize(10);
-      for (let c = 0; c < colCount; c++) {
-        const x = startX + c * cellW;
-        doc.rect(x, startY, cellW, 18).stroke();
-        doc.text(weekDays[c], x + 4, startY + 4, { width: cellW - 8, align: 'center' });
-      }
-      startY += 18;
-
-      const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-      const firstWeekday = new Date(year, monthIndex, 1).getDay(); // 0=Sun
-
-      let day = 1;
-      doc.fontSize(9);
-
-      for (let r = 0; r < 6; r++) {
-        for (let c = 0; c < colCount; c++) {
-          const x = startX + c * cellW;
-          const y = startY + r * 22;
-          let fillColor = null;
-          let label = '';
-
-          if (r === 0 && c < firstWeekday) {
-            // leading invalid cells
-            fillColor = '#f5f5f5';
-          } else if (day > daysInMonth) {
-            fillColor = '#f5f5f5';
-          } else {
-            label = String(day);
-            const iso = `${year}-${String(monthIndex+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-            if (prayedSet.has(iso)) {
-              fillColor = '#d1fae5'; // green-100
-            } else {
-              fillColor = '#ffffff';
-            }
-            day++;
-          }
-
-          if (fillColor) {
-            doc.save().rect(x, y, cellW, 22).fill(fillColor).restore();
-          }
-          doc.rect(x, y, cellW, 22).stroke();
-          if (label) {
-            doc.fillColor('#000000').text(label, x + 4, y + 5, { width: cellW - 8, align: 'left' });
-          }
-        }
-      }
-
-      // Legend
-      doc.moveDown(0.5);
-      doc.fontSize(9);
-      doc.text('Legenda: ', { continued: true });
-      doc.save().rect(doc.x, doc.y, 12, 10).fill('#d1fae5').restore();
-      doc.text(' Dia com oração', doc.x + 16, doc.y - 10);
-      doc.moveDown(1);
-    };
-
-    // Página de capa com resumo
     doc.fontSize(18).text(`Calendário de Oração - ${year}`, { align: 'center' });
-    doc.moveDown(0.2);
-    doc.fontSize(12).text(`Membro: ${target.name || '-'}`, { align: 'center' });
-    doc.moveDown(0.5);
-    doc.fontSize(12).text(`Dias de oração: ${daysPrayed}`, { align: 'center' });
-    doc.fontSize(12).text(`Percentual: ${percentage}%`, { align: 'center' });
-    doc.addPage();
+    doc.moveDown();
+    doc.fontSize(12).text(`Membro: ${target.name || '-'}`);
+    doc.moveDown();
 
-    // Desenhar os 12 meses, um por página
+    const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
     for (let m = 0; m < 12; m++) {
-      if (m > 0) doc.addPage();
-      drawMonthCalendar(m);
+      doc.fontSize(14).text(months[m]);
+      const monthDates = prayedDates.filter(d => d.getMonth() === m);
+      if (monthDates.length === 0) {
+        doc.fontSize(12).text('   (sem registros)');
+      } else {
+        const days = monthDates.map(d => d.getDate()).join(', ');
+        doc.fontSize(12).text(`   Dias com oração: ${days}`);
+      }
+      doc.moveDown(0.5);
     }
 
     doc.end();
@@ -761,24 +692,16 @@ app.get('/api/users', verifyToken, async (req, res) => {
 
     let sql = `
       SELECT u.id, u.name, u.email, u.role, u.cell_id, u.created_at,
-             c.name AS cell_name,
-             c_sup.name AS celula_supervisionada_name,
-             c_lider.name AS celula_liderada_name
+             c.name as cell_name
       FROM users u
       LEFT JOIN cells c ON c.id = u.cell_id
-      LEFT JOIN LATERAL (
-        SELECT name FROM cells WHERE supervisor_id = u.id ORDER BY name ASC LIMIT 1
-      ) c_sup ON TRUE
-      LEFT JOIN LATERAL (
-        SELECT name FROM cells WHERE leader_id = u.id ORDER BY name ASC LIMIT 1
-      ) c_lider ON TRUE
     `;
     const params = [];
     if (q) {
       params.push(`%${q.toLowerCase()}%`);
       sql += ` WHERE LOWER(u.name) LIKE $1 OR LOWER(u.email) LIKE $1`;
     }
-    sql += ` ORDER BY u.name ASC LIMIT $${params.length+1} OFFSET $${params.length+2}`;
+    sql += ` ORDER BY u.created_at DESC NULLS LAST, u.name ASC LIMIT $${params.length+1} OFFSET $${params.length+2}`;
     params.push(limit, offset);
 
     const result = await pool.query(sql, params);
@@ -861,24 +784,16 @@ app.get('/api/usuarios', verifyToken, async (req, res) => {
 
     let sql = `
       SELECT u.id, u.name, u.email, u.role, u.cell_id, u.created_at,
-             c.name AS cell_name,
-             c_sup.name AS celula_supervisionada_name,
-             c_lider.name AS celula_liderada_name
+             c.name as cell_name
       FROM users u
       LEFT JOIN cells c ON c.id = u.cell_id
-      LEFT JOIN LATERAL (
-        SELECT name FROM cells WHERE supervisor_id = u.id ORDER BY name ASC LIMIT 1
-      ) c_sup ON TRUE
-      LEFT JOIN LATERAL (
-        SELECT name FROM cells WHERE leader_id = u.id ORDER BY name ASC LIMIT 1
-      ) c_lider ON TRUE
     `;
     const params = [];
     if (q) {
       params.push(`%${q.toLowerCase()}%`);
       sql += ` WHERE LOWER(u.name) LIKE $1 OR LOWER(u.email) LIKE $1`;
     }
-    sql += ` ORDER BY u.name ASC LIMIT $${params.length+1} OFFSET $${params.length+2}`;
+    sql += ` ORDER BY u.created_at DESC NULLS LAST, u.name ASC LIMIT $${params.length+1} OFFSET $${params.length+2}`;
     params.push(limit, offset);
 
     const result = await pool.query(sql, params);
@@ -1028,9 +943,7 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
     }
 
     const { name, email, cell_id, cell_ids, funcao_na_celula } = req.body || {};
-    // Correção: pegar o nome exato enviado pelo frontend e renomear
-    const { role: selectedRole, celulalideradaid: celulaLideradaId } = req.body || {};
-    const incomingRoleRaw = (selectedRole ?? req.body?.role ?? req.body?.selectedRole ?? null);
+    const incomingRoleRaw = (req.body?.role ?? req.body?.selectedRole ?? null);
     const newRole = typeof incomingRoleRaw === 'string' ? incomingRoleRaw : null;
 
     // Suporte explícito ao nome exato enviado pelo frontend: `celulalideradaid`
@@ -1039,14 +952,14 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
       || Object.prototype.hasOwnProperty.call((req.body || {}), 'celulaLideradaId')
       || Object.prototype.hasOwnProperty.call((req.body || {}), 'leaderCellId');
     const leaderCellId = hasLeaderCellField
-      ? (celulaLideradaId ?? req.body?.leader_cell_id ?? req.body?.celulaLideradaId ?? req.body?.leaderCellId ?? null)
+      ? (req.body?.celulalideradaid ?? req.body?.leader_cell_id ?? req.body?.celulaLideradaId ?? req.body?.leaderCellId ?? null)
       : undefined;
     console.log('[PUT /api/users/:id] liderança payload', {
       newRole,
-      selectedRole,
+      selectedRole: req.body?.selectedRole,
       leader_cell_id: req.body?.leader_cell_id,
       celulalideradaid: req.body?.celulalideradaid,
-      celulaLideradaId: celulaLideradaId,
+      celulaLideradaId: req.body?.celulaLideradaId,
       leaderCellId: req.body?.leaderCellId,
       resolvedLeaderCellId: leaderCellId,
     });
@@ -1255,89 +1168,6 @@ app.put('/api/users/:id', verifyToken, async (req, res) => {
   }
 });
 
-// Users: DELETE /:id -> exclusão segura com limpeza de referências
-app.delete('/api/users/:id', verifyToken, async (req, res) => {
-  try {
-    const { role, userId: actorId } = req.user;
-    if (!['ADMIN', 'PASTOR', 'COORDENADOR'].includes(role)) {
-      return res.status(403).json({ error: 'Acesso negado' });
-    }
-
-    const rawTargetUserId = req.params.id;
-    const targetUserId = typeof rawTargetUserId === 'string' ? rawTargetUserId.trim() : '';
-    if (!targetUserId || !isValidUuid(targetUserId)) {
-      return res.status(400).json({ error: 'ID de usuário inválido' });
-    }
-
-    // Confirmar existência do usuário
-    const userRes = await pool.query('SELECT id, name, email FROM users WHERE id = $1', [targetUserId]);
-    if (userRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Usuário não encontrado' });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      // Limpar referências em cells
-      await client.query('UPDATE cells SET supervisor_id = NULL WHERE supervisor_id = $1', [targetUserId]);
-      await client.query('UPDATE cells SET leader_id = NULL WHERE leader_id = $1', [targetUserId]);
-
-      // Remover mapeamentos em cell_leaders (se existir)
-      try {
-        await client.query('DELETE FROM cell_leaders WHERE user_id = $1', [targetUserId]);
-      } catch (e) {
-        console.warn('[DELETE user] Falha ao limpar cell_leaders:', e?.message || e);
-      }
-
-      // Remover registros de oração
-      try {
-        await client.query('DELETE FROM daily_prayer_log WHERE user_id = $1', [targetUserId]);
-      } catch (e) {
-        console.warn('[DELETE user] Falha ao remover registros de oração:', e?.message || e);
-      }
-
-      // Excluir usuário
-      const delRes = await client.query('DELETE FROM users WHERE id = $1', [targetUserId]);
-      if (delRes.rowCount === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'Usuário não encontrado para exclusão' });
-      }
-
-      await client.query('COMMIT');
-
-      // Auditoria
-      try {
-        const auditId = uuidv4();
-        const ip = String((req.headers['x-forwarded-for'] || req.ip || '')).split(',')[0].trim();
-        const details = {
-          route: req.originalUrl,
-          method: req.method,
-          actor_role: role,
-          timestamp: new Date().toISOString(),
-        };
-        await pool.query(
-          'INSERT INTO audit_logs (id, performed_by, target_user_id, action, details, ip) VALUES ($1, $2, $3, $4, $5::jsonb, $6)',
-          [auditId, actorId, targetUserId, 'user.delete', JSON.stringify(details), ip]
-        );
-      } catch (e) {
-        console.warn('[AUDIT] Falha ao inserir audit_logs em delete:', e?.message || e);
-      }
-
-      return res.status(200).json({ message: 'Usuário excluído com sucesso' });
-    } catch (errTxn) {
-      await client.query('ROLLBACK');
-      console.error('Erro transacional em DELETE /api/users/:id', { message: errTxn?.message, code: errTxn?.code, detail: errTxn?.detail });
-      return res.status(500).json({ error: 'Erro interno ao excluir usuário' });
-    } finally {
-      client.release();
-    }
-  } catch (err) {
-    console.error('Erro em DELETE /api/users/:id', err);
-    return res.status(500).json({ error: 'Erro interno ao excluir usuário' });
-  }
-});
-
 // Me: GET perfil
 app.get('/api/me', verifyToken, async (req, res) => {
   try {
@@ -1506,7 +1336,7 @@ app.post('/api/prayers/register', verifyToken, async (req, res) => {
       // Fallback amigável: considera como sucesso sem tocar DB
       return res.status(200).json({ message: 'Oração registrada', fallback: true });
     }
-    const now = new Date(); const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const today = new Date().toISOString().split('T')[0];
     const existing = await pool.query(
       'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2 LIMIT 1',
       [userId, today]
@@ -1533,7 +1363,7 @@ app.get('/api/prayers/status-today', verifyToken, async (req, res) => {
       console.warn('[UUID] userId inválido em GET /api/prayers/status-today', { userId });
       return res.status(200).json({ hasPrayed: false, fallback: true });
     }
-    const now = new Date(); const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const today = new Date().toISOString().split('T')[0];
     const existing = await pool.query(
       'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2 LIMIT 1',
       [userId, today]
@@ -1595,7 +1425,7 @@ app.post('/api/prayers', verifyToken, async (req, res) => {
       // Fallback amigável: considera como sucesso sem tocar DB
       return res.status(200).json({ message: 'Oração registrada com sucesso!', fallback: true });
     }
-    const now = new Date(); const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const today = new Date().toISOString().split('T')[0];
     const exists = await pool.query(
       'SELECT id FROM daily_prayer_log WHERE user_id = $1 AND prayer_date = $2',
       [userId, today]
@@ -1626,7 +1456,7 @@ app.get('/api/prayers/my-stats', verifyToken, async (req, res) => {
     const since = new Date(); since.setDate(since.getDate() - days);
     const countRes = await pool.query(
       `SELECT COUNT(*) as count FROM daily_prayer_log WHERE user_id = $1 AND prayer_date >= $2`,
-      [userId, `${since.getFullYear()}-${String(since.getMonth()+1).padStart(2,'0')}-${String(since.getDate()).padStart(2,'0')}`]
+      [userId, since.toISOString().split('T')[0]]
     );
     return res.json({ count: parseInt(countRes.rows[0].count || '0'), days });
   } catch (err) {
@@ -1634,80 +1464,6 @@ app.get('/api/prayers/my-stats', verifyToken, async (req, res) => {
     // Fallback amigável: manter dashboard funcionando mesmo sem DB
     const days = parseInt(req.query.days || '7');
     return res.status(200).json({ count: 0, days, fallback: true });
-  }
-});
-
-// Prayers: obter datas de oração (array de YYYY-MM-DD)
-app.get('/api/prayers/:userId/log', verifyToken, async (req, res) => {
-  try {
-    const requester = req.user;
-    const targetUserId = req.params.userId;
-    const year = parseInt(String(req.query.year || ''));
-    const month = parseInt(String(req.query.month || ''));
-
-    if (!isValidUuid(targetUserId)) {
-      return res.status(400).json({ error: 'userId inválido' });
-    }
-
-    // Autorização: admin/pastor/coordenador, o próprio usuário, supervisor da célula ou líder da célula
-    let allowed = ['ADMIN','PASTOR','COORDENADOR'].includes(requester.role) || requester.userId === targetUserId;
-    if (!allowed) {
-      const cellRes = await pool.query('SELECT cell_id FROM users WHERE id = $1', [targetUserId]);
-      const targetCellId = cellRes.rows[0]?.cell_id;
-      if (targetCellId) {
-        const supCheck = await pool.query('SELECT 1 FROM cells WHERE id = $1 AND supervisor_id = $2 LIMIT 1', [targetCellId, requester.userId]);
-        allowed = supCheck.rows.length > 0;
-        if (!allowed) {
-          const leaderCheck = await pool.query('SELECT 1 FROM cell_leaders WHERE cell_id = $1 AND user_id = $2 LIMIT 1', [targetCellId, requester.userId]);
-          allowed = leaderCheck.rows.length > 0;
-        }
-      }
-    }
-    if (!allowed) {
-      return res.status(403).json({ error: 'Acesso negado' });
-    }
-
-    let sql = 'SELECT prayer_date FROM daily_prayer_log WHERE user_id = $1';
-    const params = [targetUserId];
-    if (!Number.isNaN(year)) {
-      sql += ' AND EXTRACT(YEAR FROM prayer_date) = $2';
-      params.push(year);
-      if (!Number.isNaN(month)) {
-        sql += ' AND EXTRACT(MONTH FROM prayer_date) = $3';
-        params.push(month);
-      }
-    } else if (!Number.isNaN(month)) {
-      sql += ' AND EXTRACT(YEAR FROM prayer_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND EXTRACT(MONTH FROM prayer_date) = $2';
-      params.push(month);
-    }
-    sql += ' ORDER BY prayer_date ASC';
-
-    const result = await pool.query(sql, params);
-    const dates = (result.rows || []).map(r => {
-      const d = new Date(r.prayer_date);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    });
-
-    return res.json(dates);
-  } catch (err) {
-    console.error('Erro em GET /api/prayers/:userId/log', err);
-    return res.status(500).json({ error: 'Erro ao buscar datas de oração' });
-  }
-});
-
-// Reports: alias para download de calendário em PDF
-app.get('/api/reports/calendar/:userId/download', verifyToken, async (req, res) => {
-  try {
-    const userId = req.params.userId;
-    const yearParam = req.query.year ? `?year=${encodeURIComponent(String(req.query.year))}` : '';
-    // Redireciona para a rota existente que gera o PDF
-    return res.redirect(307, `/api/users/reports/calendar/${userId}/pdf${yearParam}`);
-  } catch (err) {
-    console.error('Erro em GET /api/reports/calendar/:userId/download', err);
-    return res.status(500).json({ error: 'Erro ao processar download do calendário' });
   }
 });
 
