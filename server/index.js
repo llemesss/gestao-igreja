@@ -780,21 +780,14 @@ app.get('/api/users', verifyToken, async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit || '200'), 500);
     const offset = Math.max(parseInt(req.query.offset || '0'), 0);
 
-    let sql = `
-      SELECT u.id, u.name, u.email, u.role, u.cell_id, u.created_at,
-             c.name as cell_name
+    const sqlUsers = `
+      SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
+             u.cell_id, u.funcao_na_celula
       FROM users u
-      LEFT JOIN cells c ON c.id = u.cell_id
+      ORDER BY u.name ASC
     `;
-    const params = [];
-    if (q) {
-      params.push(`%${q.toLowerCase()}%`);
-      sql += ` WHERE LOWER(u.name) LIKE $1 OR LOWER(u.email) LIKE $1`;
-    }
-    sql += ` ORDER BY u.created_at DESC NULLS LAST, u.name ASC LIMIT $${params.length+1} OFFSET $${params.length+2}`;
-    params.push(limit, offset);
 
-    const result = await pool.query(sql, params);
+    const result = await pool.query(sqlUsers);
     // Sempre retornar um array de usuários
     return res.json(result.rows || []);
   } catch (err) {
