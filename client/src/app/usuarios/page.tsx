@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Badge } from '@/components/ui';
-import { Users, Search, Plus, Edit, ArrowLeft, X } from 'lucide-react';
+import { Users, Search, Plus, Edit, ArrowLeft, X, Calendar } from 'lucide-react';
 import { apiMethods } from '@/lib/api';
 import { auth } from '@/lib/auth';
 
@@ -464,6 +464,14 @@ export default function UsuariosPage() {
                         title="Editar usuário"
                       >
                         <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => window.open(`/api/reports/calendar/${user.id}/download/2025`, '_blank')}
+                        title="Baixar calendário de oração (PDF)"
+                      >
+                        <Calendar className="h-4 w-4" />
                       </Button>
 
                     </div>

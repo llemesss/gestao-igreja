@@ -647,6 +647,124 @@ app.get('/api/users/reports/calendar/:id/pdf', verifyToken, async (req, res) => 
   }
 });
 
+// Reports: download calendário de oração com layout de 12 meses + estatísticas
+app.get('/api/reports/calendar/:userId/download/:ano', async (req, res) => {
+  try {
+    const targetUserId = req.params.userId;
+    const year = parseInt(String(req.params.ano || new Date().getFullYear()));
+
+    const userRes = await pool.query('SELECT id, name, cell_id FROM users WHERE id = $1', [targetUserId]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    const target = userRes.rows[0];
+
+    const datesRes = await pool.query(
+      `SELECT prayer_date FROM daily_prayer_log 
+       WHERE user_id = $1 AND EXTRACT(YEAR FROM prayer_date) = $2
+       ORDER BY prayer_date ASC`,
+      [targetUserId, year]
+    );
+    const prayedSet = new Set(datesRes.rows.map(r => new Date(r.prayer_date).toISOString().slice(0,10)));
+
+    const isLeap = new Date(year, 1, 29).getMonth() === 1;
+    const totalDaysYear = isLeap ? 366 : 365;
+    const totalPrayed = prayedSet.size;
+    const percent = Math.round((totalPrayed / totalDaysYear) * 1000) / 10; // 1 casa decimal
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="calendario-oracao-${(target.name || 'membro').replace(/\s+/g,'-')}-${year}.pdf"`);
+
+    const doc = new PDFDocument({ size: 'A4', margin: 36 });
+    doc.pipe(res);
+
+    // Cabeçalho
+    doc.fontSize(18).fillColor('#0d47a1').text(`Calendário de Oração ${year}`, { align: 'center' });
+    doc.moveDown(0.3);
+    doc.fontSize(11).fillColor('#333').text(`${target.name || '-'}`, { align: 'center' });
+    doc.moveDown(0.4);
+
+    // Estatísticas
+    doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).stroke();
+    doc.moveDown(0.3);
+    doc.fontSize(12).fillColor('#000').text('Estatísticas de Oração', { align: 'center' });
+    doc.moveDown(0.2);
+    doc.fontSize(10).fillColor('#000').text(`Dias de oração: ${totalPrayed} de ${totalDaysYear} dias`, { align: 'center' });
+    doc.fontSize(10).text(`Percentual: ${percent}%`, { align: 'center' });
+
+    // Grade de meses 3x4
+    const monthsFull = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const startX = doc.page.margins.left;
+    const startY = doc.y + 6;
+    const colGap = 10;
+    const rowGap = 10;
+    const usableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const colWidth = Math.floor((usableWidth - colGap * 2) / 3);
+    const boxHeight = 150;
+
+    function drawMonthGrid(ix, x, y) {
+      doc.roundedRect(x, y, colWidth, boxHeight, 6).stroke();
+      doc.rect(x, y, colWidth, 20).fillAndStroke('#e8f0fe', '#e8f0fe');
+      doc.fillColor('#1a73e8').fontSize(10).text(`${monthsFull[ix]} ${year}`, x + 6, y + 6, { width: colWidth - 12, align: 'left' });
+
+      const dow = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+      const gridX = x + 6;
+      const gridY = y + 28;
+      const cellW = (colWidth - 12) / 7;
+      const cellH = 16;
+      doc.fillColor('#1a73e8').fontSize(8);
+      for (let i = 0; i < 7; i++) {
+        doc.text(dow[i], gridX + i * cellW + 2, gridY, { width: cellW - 4, align: 'center' });
+      }
+
+      const first = new Date(year, ix, 1);
+      const startDOW = first.getDay(); // Domingo=0
+      const daysInMonth = new Date(year, ix + 1, 0).getDate();
+
+      doc.fontSize(8).fillColor('#000');
+      for (let d = 1; d <= daysInMonth; d++) {
+        const gridIndex = startDOW + d - 1;
+        const col = gridIndex % 7;
+        const row = Math.floor(gridIndex / 7);
+        const cx = gridX + col * cellW;
+        const cy = gridY + 18 + row * (cellH + 2);
+        const dateKey = new Date(year, ix, d).toISOString().slice(0,10);
+        const isPrayed = prayedSet.has(dateKey);
+        if (isPrayed) {
+          doc.rect(cx + 1, cy + 1, cellW - 2, cellH - 2).fillAndStroke('#34a853', '#34a853');
+          doc.fillColor('#fff').text(String(d), cx, cy + 3, { width: cellW, align: 'center' });
+          doc.fillColor('#000');
+        } else {
+          doc.rect(cx, cy, cellW, cellH).stroke();
+          doc.text(String(d), cx, cy + 3, { width: cellW, align: 'center' });
+        }
+      }
+    }
+
+    for (let i = 0; i < 12; i++) {
+      const row = Math.floor(i / 3);
+      const col = i % 3;
+      const x = startX + col * (colWidth + colGap);
+      const y = startY + row * (boxHeight + rowGap);
+      drawMonthGrid(i, x, y);
+    }
+
+    // Legenda
+    doc.moveDown(0.8);
+    doc.fontSize(9);
+    const legendY = doc.y;
+    doc.rect(doc.page.margins.left, legendY, 10, 10).fill('#34a853');
+    doc.fillColor('#000').text('Dia com oração', doc.page.margins.left + 14, legendY - 2);
+    doc.rect(doc.page.margins.left + 120, legendY, 10, 10).stroke();
+    doc.text('Dia sem oração', doc.page.margins.left + 134, legendY - 2);
+
+    doc.end();
+  } catch (err) {
+    console.error('Erro em GET /api/reports/calendar/:userId/download/:ano', err);
+    return res.status(500).json({ error: 'Erro ao gerar PDF' });
+  }
+});
+
 // Users: GET / -> Listagem para painel administrativo
 app.get('/api/users', verifyToken, async (req, res) => {
   try {
