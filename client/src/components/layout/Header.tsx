@@ -24,6 +24,10 @@ export function Header({ title }: HeaderProps) {
     router.push('/login');
   };
 
+  const handleHomeClick = () => {
+    router.push('/dashboard');
+  };
+
   const getRoleDisplay = (role: string) => {
     const roleMap: { [key: string]: string } = {
       'ADMIN': 'Administrador',
@@ -65,7 +69,7 @@ export function Header({ title }: HeaderProps) {
 
       {/* Nível 2: Botões de Navegação (Menu) */}
       <nav className="flex space-x-4 p-3">
-        <Link href="/dashboard" className="px-3 py-1 rounded text-gray-700 hover:bg-gray-100">Início</Link>
+        <button onClick={handleHomeClick} className="px-3 py-1 rounded text-gray-700 hover:bg-gray-100">Início</button>
         <Link href="/dashboard?tab=oracoes" className="px-3 py-1 rounded text-gray-700 hover:bg-gray-100">Orações</Link>
         <Link href="/dashboard?tab=perfil" className="px-3 py-1 rounded text-gray-700 hover:bg-gray-100">Meu Perfil</Link>
         <Link href="/celulas" className="px-3 py-1 rounded text-gray-700 hover:bg-gray-100">Gerenciar Células</Link>
