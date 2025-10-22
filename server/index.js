@@ -648,10 +648,10 @@ app.get('/api/users/reports/calendar/:id/pdf', verifyToken, async (req, res) => 
 });
 
 // Reports: download calendário de oração com layout de 12 meses + estatísticas
-app.get('/api/reports/calendar/:userId/download/:ano', async (req, res) => {
+app.get('/api/reports/calendar/:userId/download/:year', async (req, res) => {
   try {
     const targetUserId = req.params.userId;
-    const year = parseInt(String(req.params.ano || new Date().getFullYear()));
+    const year = parseInt(String(req.params.year || new Date().getFullYear()));
 
     const userRes = await pool.query('SELECT id, name, cell_id FROM users WHERE id = $1', [targetUserId]);
     if (userRes.rows.length === 0) {
