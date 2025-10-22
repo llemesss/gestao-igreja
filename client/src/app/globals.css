@@ -30,15 +30,15 @@ body {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(0, 0, 0, 0.5);
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
-  backdrop-filter: blur(4px); /* Efeito blur no fundo */
-  -webkit-backdrop-filter: blur(4px); /* Compatibilidade com WebKit */
+  z-index: 40;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .modal-content {
@@ -50,6 +50,8 @@ body {
   max-width: 500px; /* Ajuste conforme necessário */
   max-height: 90vh;
   overflow-y: auto;
+  position: relative;
+  z-index: 50;
 }
 
 /* Estilos globais para elementos div e td */
