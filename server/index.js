@@ -619,7 +619,7 @@ app.get('/api/users/reports/calendar/:id/pdf', verifyToken, async (req, res) => 
 
     // PDF simples: título e lista de dias com oração
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="calendario-oracao-${(target.name || 'membro').replace(/\s+/g,'-')}-${year}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="calendario-oracao-${targetUserId}-${year}.pdf"`);
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     doc.pipe(res);
     doc.fontSize(18).text(`Calendário de Oração - ${year}`, { align: 'center' });
