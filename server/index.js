@@ -783,9 +783,13 @@ app.get('/api/users', verifyToken, async (req, res) => {
     const sqlUsers = `
       SELECT u.id, u.name, u.email, u.role, u.phone, u.whatsapp,
              u.cell_id, u.funcao_na_celula,
-             c.name AS cell_name
+             c.name AS cell_name,
+             s.name AS supervisor_name,
+             l.name AS leader_name
       FROM users u
       LEFT JOIN cells c ON c.id = u.cell_id
+      LEFT JOIN users s ON s.id = c.supervisor_id
+      LEFT JOIN users l ON l.id = c.leader_id
       ORDER BY u.name ASC
     `;
 
